@@ -1,0 +1,9 @@
+fastapi==0.124.4
+uvicorn==0.33.0
+sqlalchemy==2.0.50
+jinja2==3.1.4
+python-multipart==0.0.20
+bcrypt==5.0.0
+pydantic==2.10.6
+starlette==0.44.0
+Pillow==12.3.0

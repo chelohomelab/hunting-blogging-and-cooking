@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily backup timer for Hunting, Blogging and Cooking
+Requires=hbc-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
