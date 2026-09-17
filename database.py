@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -91,6 +91,85 @@ class HuntingRegulationNote(Base):
     display_order = Column(Integer, default=0)
 
     state = relationship("HuntingState", back_populates="regulation_notes")
+
+
+class HuntLogEntry(Base):
+    # A blog-style journal entry per hunt — the heart of the app (see docs/VISION.md phase 1).
+    # user_id is here even though there's only one user today: tenant-ready from day one, so
+    # adding a second user later is "add a row to Users," not a migration project.
+    #
+    # latitude/longitude are captured client-side from the device's GPS chip (works with zero
+    # cell signal) — deliberately no map tiles/geocoding here, the user relies on OnX for actual
+    # field mapping and this just records the coordinate for later reference. moon_phase is
+    # computed client-side from hunt_date (pure calculation, no API/connectivity needed).
+    # Weather fields are manual entry for now — auto-fetching historical weather from the
+    # captured coordinate+timestamp once back online is a possible future enhancement, deferred
+    # pending a provider/API-key decision rather than assumed here.
+    __tablename__ = "hunt_log_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    hunt_date = Column(String, nullable=False)          # ISO YYYY-MM-DD
+    location_label = Column(String, nullable=True)       # e.g. "Back 40", a free-text nickname
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    game_type = Column(String, nullable=True)            # Deer, Black Bear, Elk, Turkey, Upland Birds, Small Game, Migratory Birds, Trapping
+    species = Column(String, nullable=True)
+    weapon = Column(String, nullable=True)
+    weather_temp_f = Column(Float, nullable=True)
+    weather_conditions = Column(String, nullable=True)
+    wind_direction = Column(String, nullable=True)
+    wind_speed_mph = Column(Float, nullable=True)
+    moon_phase = Column(String, nullable=True)
+    harvested = Column(Boolean, default=False)
+    harvest_notes = Column(String, nullable=True)
+    narrative = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    user = relationship("User")
+    media = relationship("HuntLogMedia", back_populates="entry", cascade="all, delete-orphan")
+
+
+class HuntLogMedia(Base):
+    # Photos/video attached to a logbook entry (phase 2b — see docs/VISION.md). user_id is
+    # duplicated from the parent entry rather than requiring a join for ownership checks, same
+    # tenant-ready reasoning as everywhere else. Deliberately online-only: attaching media from
+    # the backcountry doesn't really apply (no camera-to-server path without signal either way),
+    # so this is attached once you're back in range, same as the "edit a past entry" flow.
+    __tablename__ = "hunt_log_media"
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("hunt_log_entries.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    media_type = Column(String, nullable=False)   # "photo" or "video"
+    file_path = Column(String, nullable=False)     # /static/uploads/... URL
+    caption = Column(String, nullable=True)
+    display_order = Column(Integer, default=0)
+    created_at = Column(String, nullable=False)
+
+    entry = relationship("HuntLogEntry", back_populates="media")
+
+
+class Recipe(Base):
+    # Wild-game recipes, the bridge from harvest to kitchen (phase 4 — see docs/VISION.md).
+    # hunt_log_entry_id is optional and nullable — a recipe doesn't have to trace back to one
+    # specific hunt (e.g. "a general venison chili recipe"), but when it does, this is what
+    # "linked back to the hunt(s) that produced the ingredients" means. Deliberately a single
+    # link, not many-to-many, for v1 — a recipe naming multiple contributing hunts is a real but
+    # rarer case, not worth the extra join-table complexity until it's actually needed.
+    __tablename__ = "recipes"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    hunt_log_entry_id = Column(Integer, ForeignKey("hunt_log_entries.id"), nullable=True, index=True)
+    title = Column(String, nullable=False)
+    game_type = Column(String, nullable=True)   # Deer, Black Bear, Elk, Turkey, Upland Birds, Small Game, Migratory Birds, Trapping — same categories as everywhere else, for filtering
+    ingredients = Column(String, nullable=True)  # free text, one per line
+    instructions = Column(String, nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    user = relationship("User")
+    hunt_log_entry = relationship("HuntLogEntry")
 
 
 def init_db():

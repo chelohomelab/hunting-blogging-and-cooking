@@ -100,6 +100,13 @@ def list_hunting_game_types(state_id: int, db: Session = Depends(get_db)):
     return [g for g in GAME_TYPES if g in present]
 
 
+@router.get("/hunting", response_class=HTMLResponse)
+async def hunting_page(request: Request):
+    return templates.TemplateResponse("hunting.html", {
+        "request": request, "user": request.state.user,
+    })
+
+
 # ── Admin: seed hand-transcribed state data ─────────────────────────────────
 
 @router.get("/admin/hunting", response_class=HTMLResponse)

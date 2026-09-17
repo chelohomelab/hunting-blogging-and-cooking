@@ -47,6 +47,34 @@ async def save_uploaded_file(file: UploadFile, prefix: str) -> Optional[str]:
     return f"/static/uploads/{filename}"
 
 
+MAX_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB — generous for a phone clip, cheap insurance against filling the disk
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v"}
+
+
+async def save_uploaded_video(file: UploadFile, prefix: str) -> Optional[str]:
+    """Streams to disk in chunks (unlike save_uploaded_file's photos, which get re-encoded and
+    shrunk anyway) so a large video clip is never fully buffered in memory. Raises ValueError if
+    it exceeds MAX_VIDEO_BYTES — caller is responsible for translating that into an HTTP error
+    and removing the partial file is handled here, not left for the caller to clean up."""
+    if not file or not file.filename:
+        return None
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in _VIDEO_EXTENSIONS:
+        ext = ".mp4"
+    filename = f"{prefix}_{uuid.uuid4()}{ext}"
+    path = os.path.join(UPLOAD_DIR, filename)
+    size = 0
+    with open(path, "wb") as buf:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_VIDEO_BYTES:
+                buf.close()
+                os.remove(path)
+                raise ValueError(f"Video exceeds the {MAX_VIDEO_BYTES // (1024 * 1024)}MB limit")
+            buf.write(chunk)
+    return f"/static/uploads/{filename}"
+
+
 def delete_uploaded_file(url_path: Optional[str]):
     if not url_path or not url_path.startswith("/static/uploads/"):
         return

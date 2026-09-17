@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import database as models
 from config import UPLOAD_DIR, templates
 from paths import BASE_DIR
-from routers import auth, pages, admin, backup, upgrade, hunting
+from routers import auth, pages, admin, backup, upgrade, hunting, logbook, recipes
 
 app = FastAPI(title="Hunting, Blogging and Cooking")
 
@@ -83,6 +83,8 @@ app.include_router(admin.router)
 app.include_router(backup.router)
 app.include_router(upgrade.router)
 app.include_router(hunting.router)
+app.include_router(logbook.router)
+app.include_router(recipes.router)
 
 # Global (not per-request context) — every template rendered through this Jinja2Templates
 # instance sees it automatically, so the nav templates can gate the "Upgrade" link without

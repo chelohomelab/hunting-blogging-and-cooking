@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hunting, Blogging and Cooking</title>
+    <title>Recipes — Hunting, Blogging and Cooking</title>
     <link rel="icon" type="image/png" href="/static/images/app-icon.png">
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#0f0f0f">
@@ -20,7 +20,7 @@
       @media (min-width: 1024px) { #bg-layer { background-image: url('/static/images/background-widescreen.png'); background-size: cover; background-repeat: no-repeat; background-position: center; } }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans antialiased select-none min-h-dvh flex flex-col">
+<body class="bg-gray-950 text-gray-100 font-sans antialiased select-none min-h-dvh">
 
 <div id="bg-layer"></div>
 
@@ -42,9 +42,9 @@
             <span class="text-sm font-bold text-white">Map</span>
             <span class="text-[10px] text-blue-400/70">Logged locations</span>
         </a>
-        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition shrink-0">
-            <span class="text-sm font-bold text-white">Recipes</span>
-            <span class="text-[10px] text-rose-400/70">Wild game cookbook</span>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-rose-400">Recipes</span>
+            <span class="text-[10px] text-rose-500/60">Wild game cookbook</span>
         </a>
     </div>
     <div class="relative shrink-0">
@@ -66,26 +66,24 @@
     </div>
 </header>
 
-<main class="flex-1">
+<main class="max-w-3xl mx-auto p-4 space-y-4">
+
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-700 pb-3">
+        <h2 class="text-2xl font-bold">🍳 Recipes</h2>
+        <a href="/recipes/new" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold rounded-lg transition cursor-pointer">+ New Recipe</a>
+    </div>
+
+    <div id="recipe-filter-pills" class="flex flex-wrap gap-2"></div>
+
+    <div id="recipes-empty" class="hidden text-center text-gray-500 text-sm py-16">
+        No recipes yet — <a href="/recipes/new" class="text-rose-400 font-bold hover:underline">add your first one</a>.
+    </div>
+    <div id="recipes-filter-empty" class="hidden text-center text-gray-500 text-sm py-10">No recipes for this game type yet.</div>
+
+    <div id="recipes-list" class="space-y-3"></div>
+
 </main>
 
-<script>
-function toggleUserMenu(id) {
-    const menu = document.getElementById(id);
-    const arrow = document.getElementById(id + '-arrow');
-    if (!menu) return;
-    const isOpen = !menu.classList.contains('hidden');
-    menu.classList.toggle('hidden');
-    if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
-}
-document.addEventListener('click', e => {
-    const menu = document.getElementById('user-menu');
-    if (menu && !menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
-        menu.classList.add('hidden');
-        const arrow = document.getElementById('user-menu-arrow');
-        if (arrow) arrow.style.transform = '';
-    }
-});
-</script>
+<script src="/static/recipes.js?v=1"></script>
 </body>
 </html>
