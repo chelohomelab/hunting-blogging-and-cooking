@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hunt Entry — Hunting, Blogging and Cooking</title>
+    <link rel="icon" type="image/png" href="/static/images/app-icon.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+      }
+    </script>
+    <style>
+      body { background-color: #0f0f0f; }
+
+      /* The background art is a picture of a notebook page on a table — the blank parchment in
+         the middle is where the entry's content goes. The frame keeps the image's native aspect
+         ratio (so "contain" never crops it) and the content box is positioned as a percentage of
+         the frame, measured directly off the parchment's pixel bounds in each source image —
+         see the phase3 commit for how those percentages were derived. */
+      .notebook-frame {
+          position: relative;
+          width: 100%;
+          max-width: 480px;
+          margin: 0 auto;
+          aspect-ratio: 1024 / 1536;
+          background-image: url('/static/images/phone_logbook_background.jpeg');
+          background-size: contain;
+          background-position: center;
+          background-repeat: no-repeat;
+      }
+      .notebook-content {
+          position: absolute;
+          left: 25%; top: 19.5%; width: 51%; height: 47.5%;
+          overflow-y: auto;
+          color: #3f2f1e;
+          font-family: Georgia, 'Times New Roman', serif;
+      }
+      @media (min-width: 1024px) {
+          .notebook-frame {
+              max-width: 1000px;
+              aspect-ratio: 1536 / 1024;
+              background-image: url('/static/images/logbook_background.jpeg');
+          }
+          .notebook-content { left: 27%; top: 25.5%; width: 45%; height: 52%; }
+      }
+      .notebook-content::-webkit-scrollbar { width: 6px; }
+      .notebook-content::-webkit-scrollbar-thumb { background: rgba(63,47,30,0.3); border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-dvh flex flex-col">
+
+<header class="flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
+    <div class="flex items-center gap-1.5 overflow-x-auto">
+        <a href="/" class="flex items-center gap-2 pr-4 mr-1.5 border-r border-gray-700 shrink-0 cursor-pointer">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
+            <span class="text-orange-500 font-black text-lg tracking-wide">Hunting, Blogging &amp; Cooking</span>
+        </a>
+        <a href="/hunting" class="flex flex-col px-3 py-1.5 rounded-lg bg-orange-950/60 hover:bg-orange-900/60 border border-orange-800/40 hover:border-orange-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Hunting</span>
+            <span class="text-[10px] text-orange-400/70">Seasons &amp; regulations</span>
+        </a>
+        <a href="/logbook" class="flex flex-col px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-emerald-400">Logbook</span>
+            <span class="text-[10px] text-emerald-500/60">Hunts &amp; harvests</span>
+        </a>
+        <a href="/map" class="flex flex-col px-3 py-1.5 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/40 hover:border-blue-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Map</span>
+            <span class="text-[10px] text-blue-400/70">Logged locations</span>
+        </a>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Recipes</span>
+            <span class="text-[10px] text-rose-400/70">Wild game cookbook</span>
+        </a>
+    </div>
+    <div class="relative shrink-0">
+        <button onclick="toggleUserMenu('user-menu')" class="flex items-center gap-1.5 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition cursor-pointer">
+            <span class="text-sm">⚙️</span>
+            <span class="text-sm font-medium text-gray-300">{{ user.username }}</span>
+            <span id="user-menu-arrow" class="text-gray-500 text-xs transition-transform duration-200">▼</span>
+        </button>
+        <div id="user-menu" class="hidden absolute top-full right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+            {% if user.is_admin %}
+            <a href="/admin/users" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition">👤 Users</a>
+            <a href="/admin/hunting" class="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-300 hover:bg-orange-900/30 transition">🌲 Add Hunting Data</a>
+            <a href="/admin/backup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-green-300 hover:bg-green-900/30 transition">💾 Backup</a>
+            {% if upgrade_available %}<a href="/admin/upgrade" class="flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-300 hover:bg-cyan-900/30 transition">🚀 Upgrade</a>{% endif %}
+            <a href="/admin/phone-setup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-purple-300 hover:bg-purple-900/30 transition">📱 Phone/Tablet Setup</a>
+            {% endif %}
+            <a href="/logout" class="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/40 transition">🚪 Sign Out</a>
+        </div>
+    </div>
+</header>
+
+<main class="flex-1 max-w-4xl mx-auto p-4 w-full space-y-3">
+
+    <div class="flex items-center justify-between">
+        <a href="/logbook" class="text-sm text-gray-400 hover:text-white transition">← Back to Logbook</a>
+        <a id="edit-link" href="#" class="text-sm text-orange-400 hover:text-orange-300 font-bold transition">✏️ Edit Entry</a>
+    </div>
+
+    <div class="notebook-frame">
+        <div class="notebook-content" id="notebook-content">
+            <div class="text-center text-sm opacity-60 pt-8">Loading…</div>
+        </div>
+    </div>
+
+</main>
+
+<script src="/static/logbook.js?v=1"></script>
+<script>initLogbookView({{ entry_id | tojson }});</script>
+</body>
+</html>

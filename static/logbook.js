@@ -177,14 +177,16 @@ async function loadLogbookList() {
     document.getElementById('logbook-empty').classList.toggle('hidden', all.length > 0);
     if (!all.length) { list.innerHTML = ''; return; }
 
-    list.innerHTML = all.map(e => `
-        <div class="bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5">
+    list.innerHTML = all.map(e => {
+        const tag = e._pending ? 'div' : 'a';
+        const hrefAttr = e._pending ? '' : `href="/logbook/${e.id}"`;
+        return `
+        <${tag} ${hrefAttr} class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 transition ${e._pending ? '' : 'hover:border-orange-500/40 cursor-pointer'}">
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-sm font-bold text-orange-400">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
                 <div class="flex items-center gap-2">
                     ${e._pending ? '<span class="text-[10px] font-bold bg-yellow-900/60 text-yellow-300 px-2 py-0.5 rounded">⏳ Pending sync</span>' : ''}
                     ${e.harvested ? '<span class="text-[10px] font-bold bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded">🏹 Harvest</span>' : ''}
-                    ${!e._pending ? `<a href="/logbook/${e.id}/edit" class="text-xs text-gray-400 hover:text-white transition">Edit</a>` : ''}
                 </div>
             </div>
             <div class="text-xs text-gray-400">${[e.game_type, e.species, e.weapon].filter(Boolean).join(' · ') || '—'}</div>
@@ -196,8 +198,9 @@ async function loadLogbookList() {
                     : `<img src="${m.file_path}" class="w-12 h-12 object-cover rounded">`
                 ).join('')
             }${e.media.length > 4 ? `<div class="w-12 h-12 rounded bg-gray-900 flex items-center justify-center text-xs text-gray-400">+${e.media.length - 4}</div>` : ''}</div>` : ''}
-        </div>
-    `).join('');
+        </${tag}>
+    `;
+    }).join('');
 }
 
 // ── Logbook entry form (new + edit) ─────────────────────────────────────────────────────────
@@ -368,6 +371,44 @@ function initLogbookForm(entryId) {
             status.textContent = 'Failed to save: ' + (result.error || 'unknown error');
         }
     });
+}
+
+// ── Logbook entry view (read-only "notebook page") ──────────────────────────────────────────
+
+async function initLogbookView(entryId) {
+    const box = document.getElementById('notebook-content');
+    if (!box) return;
+    document.getElementById('edit-link').href = `/logbook/${entryId}/edit`;
+
+    let e;
+    try {
+        const res = await fetch(`/api/logbook/${entryId}`);
+        if (!res.ok) throw new Error();
+        e = await res.json();
+    } catch {
+        box.innerHTML = '<div class="text-center text-sm py-8 opacity-70">Couldn\'t load this entry — you appear to be offline.</div>';
+        return;
+    }
+
+    const metaLine1 = [e.game_type, e.species, e.weapon].filter(Boolean).join(' · ');
+    const metaLine2 = [e.weather_conditions, e.weather_temp_f != null ? e.weather_temp_f + '°F' : null,
+        e.wind_direction ? 'wind ' + e.wind_direction + (e.wind_speed_mph ? ' ' + e.wind_speed_mph + 'mph' : '') : null,
+        e.moon_phase].filter(Boolean).join(' · ');
+
+    box.innerHTML = `
+        <div class="text-lg font-bold leading-tight">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
+        ${e.harvested ? '<div class="text-xs font-bold uppercase tracking-wide mt-0.5" style="color:#8a4a1c">🏹 Harvest</div>' : ''}
+        ${metaLine1 ? `<div class="text-sm mt-1.5 opacity-80">${metaLine1}</div>` : ''}
+        ${metaLine2 ? `<div class="text-xs mt-0.5 opacity-60">${metaLine2}</div>` : ''}
+        ${e.harvest_notes ? `<p class="text-sm mt-2 italic opacity-90">${e.harvest_notes}</p>` : ''}
+        ${e.narrative ? `<p class="text-sm mt-3 whitespace-pre-wrap leading-relaxed">${e.narrative}</p>` : '<p class="text-sm mt-3 opacity-50 italic">No story written yet.</p>'}
+        ${(e.media && e.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${
+            e.media.map(m => m.media_type === 'video'
+                ? `<video src="${m.file_path}" controls class="w-full rounded shadow"></video>`
+                : `<img src="${m.file_path}" class="w-full rounded shadow object-cover cursor-pointer" onclick="window.open('${m.file_path}', '_blank')">`
+            ).join('')
+        }</div>` : ''}
+    `;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
