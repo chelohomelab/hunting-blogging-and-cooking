@@ -12,7 +12,7 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v4';
+const SW_VERSION = 'v5';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;

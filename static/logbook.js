@@ -43,6 +43,58 @@ function moonPhaseFor(dateStr) {
     return MOON_PHASES[Math.floor(phase * 8 + 0.5) % 8];
 }
 
+// ── Auto-draft narrative — turns the structured fields into a starting paragraph, purely from
+// what's already on the form (no API call, works offline same as the rest of this form) ──────
+
+function draftNarrative() {
+    const val = id => (document.getElementById(id).value || '').trim();
+    const date = val('f-date');
+    const location = val('f-location-label');
+    const gameType = val('f-game-type');
+    const species = val('f-species');
+    const weapon = val('f-weapon');
+    const temp = val('f-temp');
+    const conditions = val('f-conditions');
+    const windDir = val('f-wind-dir');
+    const windSpeed = val('f-wind-speed');
+    const moonPhase = (document.getElementById('moon-phase-display').textContent || '').trim();
+    const harvested = document.getElementById('f-harvested').checked;
+    const harvestNotes = val('f-harvest-notes');
+
+    const dateLabel = date
+        ? new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : 'a recent outing';
+    const quarry = species || gameType;
+    const showBothNames = species && gameType && species.toLowerCase() !== gameType.toLowerCase();
+
+    const sentences = [];
+
+    let opener = `Headed out${location ? ' to ' + location : ''} on ${dateLabel}`;
+    if (quarry) opener += ` for ${quarry}${showBothNames ? ' (' + gameType + ')' : ''}`;
+    sentences.push(opener + '.');
+
+    const conditionBits = [];
+    if (conditions) conditionBits.push(conditions.toLowerCase());
+    if (temp) conditionBits.push(`${temp}°F`);
+    if (windDir || windSpeed) conditionBits.push(`wind ${windSpeed ? windSpeed + ' mph ' : ''}out of the ${windDir || 'unknown direction'}`.trim());
+    if (conditionBits.length) {
+        sentences.push(`Conditions were ${conditionBits.join(', ')}${moonPhase && moonPhase !== '—' ? `, under a ${moonPhase.toLowerCase()}` : ''}.`);
+    } else if (moonPhase && moonPhase !== '—') {
+        sentences.push(`It was a ${moonPhase.toLowerCase()}.`);
+    }
+
+    if (weapon) sentences.push(`Hunting with ${weapon}.`);
+
+    if (harvested) {
+        sentences.push(`Successfully harvested${species ? ' the ' + species.toLowerCase() : ''} this time.`);
+        if (harvestNotes) sentences.push(harvestNotes);
+    } else {
+        sentences.push('No harvest this time, but a good day in the field.');
+    }
+
+    return sentences.join(' ');
+}
+
 // ── Offline write-queue (localStorage — text-only entries, well within its size limits) ────
 
 const QUEUE_KEY = 'hbc_logbook_queue';
@@ -235,16 +287,8 @@ function initLogbookForm(entryId) {
     }
 
     document.getElementById('btn-draft').addEventListener('click', () => {
-        const g = v => document.getElementById(v).value;
-        const parts = [];
-        parts.push(`On ${g('f-date')}${g('f-location-label') ? ' at ' + g('f-location-label') : ''}, I hunted ${g('f-game-type') || 'game'}${g('f-species') ? ' (' + g('f-species') + ')' : ''}.`);
-        const weatherBits = [g('f-conditions'), g('f-temp') ? g('f-temp') + '°F' : '', g('f-wind-dir') ? 'wind out of the ' + g('f-wind-dir') : ''].filter(Boolean);
-        if (weatherBits.length) parts.push(`Weather: ${weatherBits.join(', ')}.`);
-        if (moonDisplay.textContent) parts.push(`Moon phase: ${moonDisplay.textContent}.`);
-        if (g('f-weapon')) parts.push(`Hunting with ${g('f-weapon')}.`);
-        parts.push(document.getElementById('f-harvested').checked ? 'Successfully harvested — ' : 'No harvest this time — ');
         const textarea = document.getElementById('f-narrative');
-        textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + parts.join(' ');
+        textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + draftNarrative();
         textarea.focus();
     });
 
