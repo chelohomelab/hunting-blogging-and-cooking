@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ 'Edit Recipe' if recipe_id else 'New Recipe' }} — Hunting, Blogging and Cooking</title>
+    <link rel="icon" type="image/png" href="/static/images/app-icon.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+      }
+    </script>
+    <style>
+      body { background-color: transparent !important; }
+      #bg-layer { position: fixed; inset: 0; z-index: -1; background-image: url('/static/images/phone-background.png'); background-size: cover; background-position: center; background-color: #0f0f0f; }
+      @media (min-width: 1024px) { #bg-layer { background-image: url('/static/images/background-widescreen.png'); background-size: cover; background-repeat: no-repeat; background-position: center; } }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-dvh">
+
+<div id="bg-layer"></div>
+
+<header class="flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
+    <div class="flex items-center gap-1.5 overflow-x-auto">
+        <a href="/" class="flex items-center gap-2 pr-4 mr-1.5 border-r border-gray-700 shrink-0 cursor-pointer">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
+            <span class="text-orange-500 font-black text-lg tracking-wide">Hunting, Blogging &amp; Cooking</span>
+        </a>
+        <a href="/hunting" class="flex flex-col px-3 py-1.5 rounded-lg bg-orange-950/60 hover:bg-orange-900/60 border border-orange-800/40 hover:border-orange-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Hunting</span>
+            <span class="text-[10px] text-orange-400/70">Seasons &amp; regulations</span>
+        </a>
+        <a href="/logbook" class="flex flex-col px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-800/40 hover:border-emerald-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Logbook</span>
+            <span class="text-[10px] text-emerald-400/70">Hunts &amp; harvests</span>
+        </a>
+        <a href="/map" class="flex flex-col px-3 py-1.5 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/40 hover:border-blue-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Map</span>
+            <span class="text-[10px] text-blue-400/70">Logged locations</span>
+        </a>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-rose-400">Recipes</span>
+            <span class="text-[10px] text-rose-500/60">Wild game cookbook</span>
+        </a>
+    </div>
+    <div class="relative shrink-0">
+        <button onclick="toggleUserMenu('user-menu')" class="flex items-center gap-1.5 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition cursor-pointer">
+            <span class="text-sm">⚙️</span>
+            <span class="text-sm font-medium text-gray-300">{{ user.username }}</span>
+            <span id="user-menu-arrow" class="text-gray-500 text-xs transition-transform duration-200">▼</span>
+        </button>
+        <div id="user-menu" class="hidden absolute top-full right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+            {% if user.is_admin %}
+            <a href="/admin/users" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition">👤 Users</a>
+            <a href="/admin/hunting" class="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-300 hover:bg-orange-900/30 transition">🌲 Add Hunting Data</a>
+            <a href="/admin/backup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-green-300 hover:bg-green-900/30 transition">💾 Backup</a>
+            {% if upgrade_available %}<a href="/admin/upgrade" class="flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-300 hover:bg-cyan-900/30 transition">🚀 Upgrade</a>{% endif %}
+            <a href="/admin/phone-setup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-purple-300 hover:bg-purple-900/30 transition">📱 Phone/Tablet Setup</a>
+            {% endif %}
+            <a href="/logout" class="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/40 transition">🚪 Sign Out</a>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-2xl mx-auto p-4 space-y-4">
+
+    <div class="flex items-center justify-between border-b border-gray-700 pb-3">
+        <h2 class="text-2xl font-bold">{{ '✏️ Edit Recipe' if recipe_id else '🍳 New Recipe' }}</h2>
+        <a href="/recipes" class="text-sm text-gray-400 hover:text-white transition">← Back</a>
+    </div>
+
+    <form id="recipe-form" class="space-y-5">
+
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Title</label>
+                <input type="text" id="f-title" required placeholder="e.g. Venison Backstrap with Cast-Iron Potatoes"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Game Type</label>
+                    <select id="f-game-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition">
+                        <option value="">—</option>
+                        {% for g in game_types %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Made From This Hunt (optional)</label>
+                    <select id="f-hunt-link" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition">
+                        <option value="">— None —</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider">Ingredients</label>
+            <p class="text-xs text-gray-500">One per line</p>
+            <textarea id="f-ingredients" rows="6" placeholder="2 lb venison backstrap&#10;4 tbsp butter&#10;1 lb baby potatoes&#10;Salt &amp; pepper"
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-rose-500"></textarea>
+        </div>
+
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider">Instructions</label>
+            <textarea id="f-instructions" rows="8" placeholder="What did you do?"
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-rose-500"></textarea>
+        </div>
+
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider">Notes</label>
+            <textarea id="f-notes" rows="3" placeholder="Tips, serving suggestions, what you'd change next time…"
+                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-rose-500"></textarea>
+        </div>
+
+        <div id="form-status" class="text-sm text-gray-400"></div>
+
+        <div class="flex items-center justify-between gap-3">
+            <button type="button" id="btn-delete" class="hidden px-4 py-2.5 bg-red-900/60 hover:bg-red-800 border border-red-700 text-red-300 text-sm font-bold rounded-lg transition cursor-pointer">Delete Recipe</button>
+            <button type="submit" class="ml-auto px-6 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg text-sm transition cursor-pointer">Save Recipe</button>
+        </div>
+    </form>
+
+</main>
+
+<script src="/static/recipes.js?v=1"></script>
+<script>initRecipeForm({{ recipe_id | tojson }});</script>
+</body>
+</html>

@@ -12,7 +12,7 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v1';
+const SW_VERSION = 'v4';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;
@@ -28,6 +28,8 @@ const STATIC_URLS = [
   '/static/images/background-widescreen.png',
   '/static/images/phone-background.png',
   '/static/hunting.js',
+  '/static/logbook.js',
+  '/static/recipes.js',
 ];
 // Fetched individually (not via cache.addAll, which is all-or-nothing) so a CDN hiccup during
 // install doesn't fail the whole install.
@@ -35,16 +37,25 @@ const CROSS_ORIGIN_URLS = [
   'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
 ];
 
-// Exact-match shell routes (server ignores no query string for these).
-const SHELL_EXACT = ['/', '/index.html'];
+// Exact-match shell routes (server ignores no query string for these). /logbook/{id}/edit is
+// deliberately NOT included — editing a past entry needs a live fetch of that entry anyway (see
+// logbook.js), so there's no offline-editing scenario this shell cache would actually serve.
+const SHELL_EXACT = ['/', '/index.html', '/hunting', '/logbook', '/logbook/new', '/recipes', '/recipes/new'];
 
-// The hunting reference data this app currently exposes — small, always network-first with
-// cache fallback so a stale copy is only ever served when the network genuinely isn't there.
+// The hunting reference data and the user's own logbook entries — small, always network-first
+// with cache fallback so a stale copy is only ever served when the network genuinely isn't
+// there. (Creating a NEW logbook entry offline doesn't go through this at all — that's a POST,
+// which this service worker never intercepts; see the write-queue in logbook.js instead.)
 const DATA_PATTERNS = [
   /^\/hunting\/states$/,
   /^\/hunting\/states\/\d+\/seasons$/,
   /^\/hunting\/states\/\d+\/regulations$/,
   /^\/hunting\/states\/\d+\/game-types$/,
+  /^\/api\/logbook$/,
+  /^\/api\/logbook\/\d+$/,
+  /^\/api\/recipes$/,
+  /^\/api\/recipes\/\d+$/,
+  /^\/api\/recipes\/harvest-options$/,
 ];
 
 self.addEventListener('install', (event) => {

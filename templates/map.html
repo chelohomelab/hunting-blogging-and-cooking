@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hunting, Blogging and Cooking</title>
+    <title>Map — Hunting, Blogging and Cooking</title>
     <link rel="icon" type="image/png" href="/static/images/app-icon.png">
     <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#0f0f0f">
     <meta name="mobile-web-app-capable" content="yes">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
       }
     </script>
     <style>
-      body { background-color: transparent !important; }
-      #bg-layer { position: fixed; inset: 0; z-index: -1; background-image: url('/static/images/phone-background.png'); background-size: cover; background-position: center; background-color: #0f0f0f; }
-      @media (min-width: 1024px) { #bg-layer { background-image: url('/static/images/background-widescreen.png'); background-size: cover; background-repeat: no-repeat; background-position: center; } }
+      body { background-color: #0f0f0f; }
+      #hunt-map { background: #1a1a1a; }
+      .leaflet-popup-content-wrapper { background: #1f2937; color: #e5e7eb; }
+      .leaflet-popup-tip { background: #1f2937; }
+      .leaflet-popup-content a { color: #fb923c; font-weight: bold; }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans antialiased select-none min-h-dvh flex flex-col">
-
-<div id="bg-layer"></div>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-dvh flex flex-col">
 
 <header class="flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
     <div class="flex items-center gap-1.5 overflow-x-auto">
@@ -38,9 +40,9 @@
             <span class="text-sm font-bold text-white">Logbook</span>
             <span class="text-[10px] text-emerald-400/70">Hunts &amp; harvests</span>
         </a>
-        <a href="/map" class="flex flex-col px-3 py-1.5 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/40 hover:border-blue-500/40 transition shrink-0">
-            <span class="text-sm font-bold text-white">Map</span>
-            <span class="text-[10px] text-blue-400/70">Logged locations</span>
+        <a href="/map" class="flex flex-col px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-blue-400">Map</span>
+            <span class="text-[10px] text-blue-500/60">Logged locations</span>
         </a>
         <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition shrink-0">
             <span class="text-sm font-bold text-white">Recipes</span>
@@ -66,10 +68,15 @@
     </div>
 </header>
 
-<main class="flex-1">
-</main>
+<div id="map-empty" class="hidden flex-1 flex items-center justify-center text-center text-gray-500 text-sm px-4">
+    No logged hunts have a location yet — capture one from <a href="/logbook/new" class="text-orange-400 font-bold hover:underline ml-1">a new logbook entry</a>.
+</div>
 
+<div id="hunt-map" class="flex-1"></div>
+
+<script src="/static/map.js?v=1"></script>
 <script>
+// This page doesn't load a shared app.js — small inline copy of the user-menu toggle.
 function toggleUserMenu(id) {
     const menu = document.getElementById(id);
     const arrow = document.getElementById(id + '-arrow');
