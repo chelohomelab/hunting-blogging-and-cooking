@@ -52,6 +52,13 @@ async def recipes_new_page(request: Request):
     })
 
 
+@router.get("/recipes/{recipe_id}", response_class=HTMLResponse)
+async def recipes_view_page(recipe_id: int, request: Request):
+    return templates.TemplateResponse("recipe_view.html", {
+        "request": request, "user": request.state.user, "recipe_id": recipe_id,
+    })
+
+
 @router.get("/recipes/{recipe_id}/edit", response_class=HTMLResponse)
 async def recipes_edit_page(recipe_id: int, request: Request):
     return templates.TemplateResponse("recipe_form.html", {
