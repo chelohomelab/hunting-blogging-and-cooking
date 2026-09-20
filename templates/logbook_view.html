@@ -18,35 +18,35 @@
       body { background-color: #0f0f0f; }
 
       /* The background art is a picture of a notebook page on a table — the blank parchment in
-         the middle is where the entry's content goes. The frame keeps the image's native aspect
-         ratio (so "contain" never crops it) and the content box is positioned as a percentage of
-         the frame, measured directly off the parchment's pixel bounds in each source image —
-         see the phase3 commit for how those percentages were derived. */
+         the middle is where the entry's content goes. Stretched to fill the screen below the
+         header (background-size: cover), same "stretch, crop is fine" treatment as the rest of
+         the app's backgrounds — see docs/VISION.md's background rollback note. The content box
+         is positioned as a percentage of the frame, measured off the parchment's pixel bounds
+         at the frame's native aspect ratio; cover cropping is symmetric about center so this
+         still lines up close enough at common screen ratios even though it isn't pixel-exact
+         at every viewport size. */
       .notebook-frame {
           position: relative;
+          flex: 1;
           width: 100%;
-          max-width: 480px;
-          margin: 0 auto;
-          aspect-ratio: 1024 / 1536;
           background-image: url('/static/images/phone_logbook_background.jpeg');
-          background-size: contain;
+          background-size: cover;
           background-position: center;
           background-repeat: no-repeat;
       }
       .notebook-content {
           position: absolute;
-          left: 25%; top: 19.5%; width: 51%; height: 47.5%;
+          left: 22%; top: 17%; width: 57%; height: 52%;
           overflow-y: auto;
-          color: #3f2f1e;
-          font-family: Georgia, 'Times New Roman', serif;
+          color: #1c1006;
+          font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+          font-size: 1.2rem;
+          font-weight: 600;
+          text-shadow: 0 1px 0 rgba(255,255,255,0.35);
       }
       @media (min-width: 1024px) {
-          .notebook-frame {
-              max-width: 1000px;
-              aspect-ratio: 1536 / 1024;
-              background-image: url('/static/images/logbook_background.jpeg');
-          }
-          .notebook-content { left: 27%; top: 25.5%; width: 45%; height: 52%; }
+          .notebook-frame { background-image: url('/static/images/logbook_background.jpeg'); }
+          .notebook-content { left: 25%; top: 22%; width: 49%; height: 58%; font-size: 1.65rem; }
       }
       .notebook-content::-webkit-scrollbar { width: 6px; }
       .notebook-content::-webkit-scrollbar-thumb { background: rgba(63,47,30,0.3); border-radius: 3px; }
@@ -96,9 +96,9 @@
     </div>
 </header>
 
-<main class="flex-1 max-w-4xl mx-auto p-4 w-full space-y-3">
+<main class="flex-1 w-full flex flex-col">
 
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between px-4 py-2 bg-gray-950/80">
         <a href="/logbook" class="text-sm text-gray-400 hover:text-white transition">← Back to Logbook</a>
         <a id="edit-link" href="#" class="text-sm text-orange-400 hover:text-orange-300 font-bold transition">✏️ Edit Entry</a>
     </div>

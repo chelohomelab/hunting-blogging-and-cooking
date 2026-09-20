@@ -396,12 +396,12 @@ async function initLogbookView(entryId) {
         e.moon_phase].filter(Boolean).join(' · ');
 
     box.innerHTML = `
-        <div class="text-lg font-bold leading-tight">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
-        ${e.harvested ? '<div class="text-xs font-bold uppercase tracking-wide mt-0.5" style="color:#8a4a1c">🏹 Harvest</div>' : ''}
-        ${metaLine1 ? `<div class="text-sm mt-1.5 opacity-80">${metaLine1}</div>` : ''}
-        ${metaLine2 ? `<div class="text-xs mt-0.5 opacity-60">${metaLine2}</div>` : ''}
-        ${e.harvest_notes ? `<p class="text-sm mt-2 italic opacity-90">${e.harvest_notes}</p>` : ''}
-        ${e.narrative ? `<p class="text-sm mt-3 whitespace-pre-wrap leading-relaxed">${e.narrative}</p>` : '<p class="text-sm mt-3 opacity-50 italic">No story written yet.</p>'}
+        <div class="text-2xl font-extrabold leading-tight">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
+        ${e.harvested ? '<div class="text-sm font-extrabold uppercase tracking-wide mt-1" style="color:#7a2f00">🏹 Harvest</div>' : ''}
+        ${metaLine1 ? `<div class="text-lg mt-2 font-bold">${metaLine1}</div>` : ''}
+        ${metaLine2 ? `<div class="text-base mt-0.5 font-semibold" style="color:#3a2a18">${metaLine2}</div>` : ''}
+        ${e.harvest_notes ? `<p class="text-lg mt-3 font-semibold">${e.harvest_notes}</p>` : ''}
+        ${e.narrative ? `<p class="text-lg mt-4 whitespace-pre-wrap leading-relaxed font-semibold">${e.narrative}</p>` : '<p class="text-lg mt-4 italic font-semibold" style="color:#3a2a18">No story written yet.</p>'}
         ${(e.media && e.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${
             e.media.map(m => m.media_type === 'video'
                 ? `<video src="${m.file_path}" controls class="w-full rounded shadow"></video>`
