@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -81,6 +82,44 @@ def _version_at(rev: str) -> str | None:
     talks in version numbers rather than commit hashes."""
     r = _git("show", f"{rev}:VERSION")
     return r["stdout"].strip() if r["ok"] and r["stdout"].strip() else None
+
+
+def _parse_version(v: str) -> tuple:
+    try:
+        return tuple(int(p) for p in v.strip().split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+def _changelog_entries_since(current_version: str | None, rev: str) -> list[str] | None:
+    """Plain-English bullet points (not raw commit subjects) for every CHANGELOG.md '## x.y.z'
+    section newer than current_version, read from `rev` (typically origin/BRANCH so this reflects
+    what's actually pending, not what's already installed). None if CHANGELOG.md doesn't exist
+    there or has no qualifying section — callers fall back to raw commit subjects in that case,
+    which only happens if someone bumps VERSION without adding a changelog entry."""
+    r = _git("show", f"{rev}:CHANGELOG.md")
+    if not r["ok"] or not r["stdout"]:
+        return None
+    current = _parse_version(current_version) if current_version else (0,)
+    bullets: list[str] = []
+    section_version = None
+    for line in r["stdout"].splitlines():
+        header = re.match(r"^##\s+([0-9]+(?:\.[0-9]+)*)", line)
+        if header:
+            section_version = _parse_version(header.group(1))
+            if section_version <= current:
+                break
+            continue
+        if not section_version or section_version <= current:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("-"):
+            bullets.append(stripped[1:].strip())
+        elif stripped and bullets:
+            # Wrapped continuation line (no leading "-") — append to the previous bullet
+            # instead of dropping it or treating it as a new, truncated entry.
+            bullets[-1] += " " + stripped
+    return bullets or None
 
 
 def _repo_web_url() -> str | None:
@@ -214,6 +253,7 @@ def upgrade_check(request: Request):
     latest_version = _version_at(f"origin/{BRANCH}")
     behind = _git("log", f"HEAD..origin/{BRANCH}", "--format=%h %s")
     commits_behind = behind["stdout"].splitlines() if behind["ok"] and behind["stdout"] else []
+    changelog_entries = _changelog_entries_since(current_version, f"origin/{BRANCH}")
 
     return {
         "ok": True,
@@ -223,6 +263,7 @@ def upgrade_check(request: Request):
         "latest_version": latest_version,
         "up_to_date": current is not None and latest is not None and current["hash"] == latest["hash"],
         "commits_behind": commits_behind,
+        "changelog_entries": changelog_entries,
         "dirty": _is_dirty(),
         "dirty_files": _dirty_files(),
         "rollback": _rollback_summary(),
