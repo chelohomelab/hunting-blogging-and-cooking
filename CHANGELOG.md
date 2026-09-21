@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.3.0 - 2026-09-21
+- "Show details" on this page now describes changes in plain English instead of raw commit
+  messages.
+- Removed the map page — it was a generic map, not the planned onX integration. A proper
+  onX-based approach is being worked out instead.
+
 ## 0.2.0 - 2026-09-21
 - Hunt logbook: log a hunt with GPS location, weather, and moon phase — works even with no cell
   signal, syncing automatically once you're back in range.
