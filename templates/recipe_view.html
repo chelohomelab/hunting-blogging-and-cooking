@@ -17,24 +17,22 @@
     <style>
       body { background-color: #0f0f0f; }
 
-      /* Only one (widescreen) crop of this art was provided — no phone-specific version like
-         the logbook got. On mobile the frame keeps the image's own aspect ratio (contain, so
-         nothing crops out of alignment); on desktop, where the frame's aspect is already close
-         to this image's native ratio, it stretches to fill the screen same as the logbook view
-         (background-size: cover — see docs/VISION.md's background rollback note). The content
-         box percentages were measured directly off the parchment's pixel bounds. */
+      /* Matched phone/desktop crops, same treatment as the logbook view: the frame fills the
+         screen below the header (background-size: cover, stretch-and-crop-is-fine — see
+         docs/VISION.md's background rollback note), and the content box is positioned as a
+         percentage of the frame, measured off each image's parchment pixel bounds. */
       .notebook-frame {
           position: relative;
+          flex: 1;
           width: 100%;
-          aspect-ratio: 1671 / 941;
-          background-image: url('/static/images/recipes-background-widescreen.jpeg');
-          background-size: contain;
+          background-image: url('/static/images/phone-recipes-background.jpeg');
+          background-size: cover;
           background-position: center;
           background-repeat: no-repeat;
       }
       .notebook-content {
           position: absolute;
-          left: 30%; top: 12%; width: 42%; height: 78%;
+          left: 20%; top: 22%; width: 62%; height: 53%;
           overflow-y: auto;
           color: #1c1006;
           font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -43,8 +41,8 @@
           text-shadow: 0 1px 0 rgba(255,255,255,0.35);
       }
       @media (min-width: 1024px) {
-          .notebook-frame { flex: 1; aspect-ratio: auto; background-size: cover; }
-          .notebook-content { font-size: 1.35rem; }
+          .notebook-frame { background-image: url('/static/images/recipes-background-widescreen.jpeg'); }
+          .notebook-content { left: 30%; top: 12%; width: 42%; height: 78%; font-size: 1.35rem; }
       }
       .notebook-content::-webkit-scrollbar { width: 6px; }
       .notebook-content::-webkit-scrollbar-thumb { background: rgba(63,47,30,0.3); border-radius: 3px; }
