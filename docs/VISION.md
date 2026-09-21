@@ -43,7 +43,9 @@ One feature at a time, each shipped and used before starting the next:
    design, not an afterthought bolted onto the logging feature.
 3. **Maps** — onX integration for hunt locations/routes. No known public onX API as of this
    writing — likely a manual link/screenshot/embed approach rather than a real API integration
-   unless that changes.
+   unless that changes. (A first pass built a generic Leaflet/CartoDB map instead of actual onX
+   integration — this is exactly the mismatch that section warned about, and it's been removed;
+   see the 2026-09-21 discussion for the onX integration approach actually being pursued.)
 4. **Recipes** — meals cooked from the wild game harvested, linked back to the hunt(s) that
    produced the ingredients.
 
