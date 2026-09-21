@@ -68,7 +68,7 @@
         <div id="new-version-block" class="hidden space-y-2 pt-2 border-t border-gray-700">
             <div class="flex items-center justify-between">
                 <span class="text-sm text-emerald-400 font-bold">New version: <span id="new-version-num"></span></span>
-                <button onclick="toggleDetails()" class="text-xs text-gray-400 hover:text-gray-200 transition cursor-pointer">Show details <span id="details-arrow">▾</span></button>
+                <button onclick="toggleDetails()" class="text-xs text-gray-400 hover:text-gray-200 transition cursor-pointer">Show details <span id="details-count"></span><span id="details-arrow">▾</span></button>
             </div>
             <div id="changes-details" class="hidden bg-gray-900 rounded-lg p-3 text-xs font-mono text-gray-400 space-y-1 max-h-48 overflow-y-auto"></div>
             <button id="upgrade-btn" onclick="runUpgrade()" class="w-full px-4 py-2.5 bg-orange-700 hover:bg-orange-600 text-white text-sm font-bold rounded-lg transition cursor-pointer">
@@ -165,9 +165,19 @@
             } else {
                 statusEl.textContent = '';
                 _latestVersionLabel = d.latest_version || (d.latest ? d.latest.hash : 'latest');
+                // The VERSION file only changes when someone remembers to bump it — a real
+                // pending upgrade can still land between bumps, and showing "New version: 0.1.0"
+                // when you're already on 0.1.0 reads as a no-op even though it isn't. Fall back
+                // to the commit hash so there's always something visibly different to justify
+                // the button.
+                if (_latestVersionLabel === d.current_version && d.latest) {
+                    _latestVersionLabel = `${_latestVersionLabel} (${d.latest.hash})`;
+                }
                 document.getElementById('new-version-num').textContent = _latestVersionLabel;
                 document.getElementById('upgrade-btn-version').textContent = _latestVersionLabel;
                 const details = document.getElementById('changes-details');
+                const commitCount = (d.commits_behind || []).length;
+                document.getElementById('details-count').textContent = commitCount ? `(${commitCount} commit${commitCount === 1 ? '' : 's'}) ` : '';
                 details.innerHTML = (d.commits_behind || []).map(c => `<div>${c}</div>`).join('') || '<div class="text-gray-600 italic">No details available.</div>';
                 details.classList.add('hidden');
                 document.getElementById('details-arrow').textContent = '▾';
