@@ -26,8 +26,3 @@ async def index(request: Request):
 @router.get("/index.html", response_class=HTMLResponse)
 async def index_explicit(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "user": request.state.user})
-
-
-@router.get("/map", response_class=HTMLResponse)
-async def map_page(request: Request):
-    return templates.TemplateResponse("map.html", {"request": request, "user": request.state.user})
