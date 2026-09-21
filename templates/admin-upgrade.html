@@ -176,9 +176,13 @@
                 document.getElementById('new-version-num').textContent = _latestVersionLabel;
                 document.getElementById('upgrade-btn-version').textContent = _latestVersionLabel;
                 const details = document.getElementById('changes-details');
-                const commitCount = (d.commits_behind || []).length;
-                document.getElementById('details-count').textContent = commitCount ? `(${commitCount} commit${commitCount === 1 ? '' : 's'}) ` : '';
-                details.innerHTML = (d.commits_behind || []).map(c => `<div>${c}</div>`).join('') || '<div class="text-gray-600 italic">No details available.</div>';
+                // Prefer CHANGELOG.md's plain-English bullets over raw commit subjects — only
+                // falls back to commits when a VERSION bump landed without a changelog entry.
+                const changelogEntries = d.changelog_entries;
+                const usingChangelog = changelogEntries && changelogEntries.length > 0;
+                const items = usingChangelog ? changelogEntries : (d.commits_behind || []);
+                document.getElementById('details-count').textContent = items.length ? `(${items.length} change${items.length === 1 ? '' : 's'}) ` : '';
+                details.innerHTML = items.map(c => `<div>${usingChangelog ? '• ' : ''}${c}</div>`).join('') || '<div class="text-gray-600 italic">No details available.</div>';
                 details.classList.add('hidden');
                 document.getElementById('details-arrow').textContent = '▾';
                 if (!d.dirty) newBlock.classList.remove('hidden');
