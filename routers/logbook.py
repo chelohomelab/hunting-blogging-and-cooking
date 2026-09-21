@@ -59,6 +59,13 @@ async def logbook_new_page(request: Request):
     })
 
 
+@router.get("/logbook/{entry_id}", response_class=HTMLResponse)
+async def logbook_view_page(entry_id: int, request: Request):
+    return templates.TemplateResponse("logbook_view.html", {
+        "request": request, "user": request.state.user, "entry_id": entry_id,
+    })
+
+
 @router.get("/logbook/{entry_id}/edit", response_class=HTMLResponse)
 async def logbook_edit_page(entry_id: int, request: Request):
     return templates.TemplateResponse("logbook_form.html", {

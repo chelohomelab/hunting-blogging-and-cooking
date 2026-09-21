@@ -43,6 +43,58 @@ function moonPhaseFor(dateStr) {
     return MOON_PHASES[Math.floor(phase * 8 + 0.5) % 8];
 }
 
+// ── Auto-draft narrative — turns the structured fields into a starting paragraph, purely from
+// what's already on the form (no API call, works offline same as the rest of this form) ──────
+
+function draftNarrative() {
+    const val = id => (document.getElementById(id).value || '').trim();
+    const date = val('f-date');
+    const location = val('f-location-label');
+    const gameType = val('f-game-type');
+    const species = val('f-species');
+    const weapon = val('f-weapon');
+    const temp = val('f-temp');
+    const conditions = val('f-conditions');
+    const windDir = val('f-wind-dir');
+    const windSpeed = val('f-wind-speed');
+    const moonPhase = (document.getElementById('moon-phase-display').textContent || '').trim();
+    const harvested = document.getElementById('f-harvested').checked;
+    const harvestNotes = val('f-harvest-notes');
+
+    const dateLabel = date
+        ? new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : 'a recent outing';
+    const quarry = species || gameType;
+    const showBothNames = species && gameType && species.toLowerCase() !== gameType.toLowerCase();
+
+    const sentences = [];
+
+    let opener = `Headed out${location ? ' to ' + location : ''} on ${dateLabel}`;
+    if (quarry) opener += ` for ${quarry}${showBothNames ? ' (' + gameType + ')' : ''}`;
+    sentences.push(opener + '.');
+
+    const conditionBits = [];
+    if (conditions) conditionBits.push(conditions.toLowerCase());
+    if (temp) conditionBits.push(`${temp}°F`);
+    if (windDir || windSpeed) conditionBits.push(`wind ${windSpeed ? windSpeed + ' mph ' : ''}out of the ${windDir || 'unknown direction'}`.trim());
+    if (conditionBits.length) {
+        sentences.push(`Conditions were ${conditionBits.join(', ')}${moonPhase && moonPhase !== '—' ? `, under a ${moonPhase.toLowerCase()}` : ''}.`);
+    } else if (moonPhase && moonPhase !== '—') {
+        sentences.push(`It was a ${moonPhase.toLowerCase()}.`);
+    }
+
+    if (weapon) sentences.push(`Hunting with ${weapon}.`);
+
+    if (harvested) {
+        sentences.push(`Successfully harvested${species ? ' the ' + species.toLowerCase() : ''} this time.`);
+        if (harvestNotes) sentences.push(harvestNotes);
+    } else {
+        sentences.push('No harvest this time, but a good day in the field.');
+    }
+
+    return sentences.join(' ');
+}
+
 // ── Offline write-queue (localStorage — text-only entries, well within its size limits) ────
 
 const QUEUE_KEY = 'hbc_logbook_queue';
@@ -125,14 +177,16 @@ async function loadLogbookList() {
     document.getElementById('logbook-empty').classList.toggle('hidden', all.length > 0);
     if (!all.length) { list.innerHTML = ''; return; }
 
-    list.innerHTML = all.map(e => `
-        <div class="bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5">
+    list.innerHTML = all.map(e => {
+        const tag = e._pending ? 'div' : 'a';
+        const hrefAttr = e._pending ? '' : `href="/logbook/${e.id}"`;
+        return `
+        <${tag} ${hrefAttr} class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 transition ${e._pending ? '' : 'hover:border-orange-500/40 cursor-pointer'}">
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-sm font-bold text-orange-400">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
                 <div class="flex items-center gap-2">
                     ${e._pending ? '<span class="text-[10px] font-bold bg-yellow-900/60 text-yellow-300 px-2 py-0.5 rounded">⏳ Pending sync</span>' : ''}
                     ${e.harvested ? '<span class="text-[10px] font-bold bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded">🏹 Harvest</span>' : ''}
-                    ${!e._pending ? `<a href="/logbook/${e.id}/edit" class="text-xs text-gray-400 hover:text-white transition">Edit</a>` : ''}
                 </div>
             </div>
             <div class="text-xs text-gray-400">${[e.game_type, e.species, e.weapon].filter(Boolean).join(' · ') || '—'}</div>
@@ -144,8 +198,9 @@ async function loadLogbookList() {
                     : `<img src="${m.file_path}" class="w-12 h-12 object-cover rounded">`
                 ).join('')
             }${e.media.length > 4 ? `<div class="w-12 h-12 rounded bg-gray-900 flex items-center justify-center text-xs text-gray-400">+${e.media.length - 4}</div>` : ''}</div>` : ''}
-        </div>
-    `).join('');
+        </${tag}>
+    `;
+    }).join('');
 }
 
 // ── Logbook entry form (new + edit) ─────────────────────────────────────────────────────────
@@ -235,16 +290,8 @@ function initLogbookForm(entryId) {
     }
 
     document.getElementById('btn-draft').addEventListener('click', () => {
-        const g = v => document.getElementById(v).value;
-        const parts = [];
-        parts.push(`On ${g('f-date')}${g('f-location-label') ? ' at ' + g('f-location-label') : ''}, I hunted ${g('f-game-type') || 'game'}${g('f-species') ? ' (' + g('f-species') + ')' : ''}.`);
-        const weatherBits = [g('f-conditions'), g('f-temp') ? g('f-temp') + '°F' : '', g('f-wind-dir') ? 'wind out of the ' + g('f-wind-dir') : ''].filter(Boolean);
-        if (weatherBits.length) parts.push(`Weather: ${weatherBits.join(', ')}.`);
-        if (moonDisplay.textContent) parts.push(`Moon phase: ${moonDisplay.textContent}.`);
-        if (g('f-weapon')) parts.push(`Hunting with ${g('f-weapon')}.`);
-        parts.push(document.getElementById('f-harvested').checked ? 'Successfully harvested — ' : 'No harvest this time — ');
         const textarea = document.getElementById('f-narrative');
-        textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + parts.join(' ');
+        textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + draftNarrative();
         textarea.focus();
     });
 
@@ -324,6 +371,44 @@ function initLogbookForm(entryId) {
             status.textContent = 'Failed to save: ' + (result.error || 'unknown error');
         }
     });
+}
+
+// ── Logbook entry view (read-only "notebook page") ──────────────────────────────────────────
+
+async function initLogbookView(entryId) {
+    const box = document.getElementById('notebook-content');
+    if (!box) return;
+    document.getElementById('edit-link').href = `/logbook/${entryId}/edit`;
+
+    let e;
+    try {
+        const res = await fetch(`/api/logbook/${entryId}`);
+        if (!res.ok) throw new Error();
+        e = await res.json();
+    } catch {
+        box.innerHTML = '<div class="text-center text-sm py-8 opacity-70">Couldn\'t load this entry — you appear to be offline.</div>';
+        return;
+    }
+
+    const metaLine1 = [e.game_type, e.species, e.weapon].filter(Boolean).join(' · ');
+    const metaLine2 = [e.weather_conditions, e.weather_temp_f != null ? e.weather_temp_f + '°F' : null,
+        e.wind_direction ? 'wind ' + e.wind_direction + (e.wind_speed_mph ? ' ' + e.wind_speed_mph + 'mph' : '') : null,
+        e.moon_phase].filter(Boolean).join(' · ');
+
+    box.innerHTML = `
+        <div class="text-2xl font-extrabold leading-tight">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
+        ${e.harvested ? '<div class="text-sm font-extrabold uppercase tracking-wide mt-1" style="color:#7a2f00">🏹 Harvest</div>' : ''}
+        ${metaLine1 ? `<div class="text-lg mt-2 font-bold">${metaLine1}</div>` : ''}
+        ${metaLine2 ? `<div class="text-base mt-0.5 font-semibold" style="color:#3a2a18">${metaLine2}</div>` : ''}
+        ${e.harvest_notes ? `<p class="text-lg mt-3 font-semibold">${e.harvest_notes}</p>` : ''}
+        ${e.narrative ? `<p class="text-lg mt-4 whitespace-pre-wrap leading-relaxed font-semibold">${e.narrative}</p>` : '<p class="text-lg mt-4 italic font-semibold" style="color:#3a2a18">No story written yet.</p>'}
+        ${(e.media && e.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${
+            e.media.map(m => m.media_type === 'video'
+                ? `<video src="${m.file_path}" controls class="w-full rounded shadow"></video>`
+                : `<img src="${m.file_path}" class="w-full rounded shadow object-cover cursor-pointer" onclick="window.open('${m.file_path}', '_blank')">`
+            ).join('')
+        }</div>` : ''}
+    `;
 }
 
 document.addEventListener('DOMContentLoaded', () => {

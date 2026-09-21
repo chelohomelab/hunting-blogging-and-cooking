@@ -50,7 +50,7 @@ function renderRecipeList() {
     document.getElementById('recipes-filter-empty')?.classList.toggle('hidden', !(_allRecipes.length > 0 && filtered.length === 0));
 
     list.innerHTML = filtered.map(r => `
-        <a href="/recipes/${r.id}/edit" class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 hover:border-rose-500/40 transition">
+        <a href="/recipes/${r.id}" class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 hover:border-rose-500/40 transition">
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-sm font-bold text-rose-400">${r.title}</div>
                 ${r.game_type ? `<span class="text-[10px] font-bold bg-rose-900/60 text-rose-300 px-2 py-0.5 rounded">${r.game_type}</span>` : ''}
@@ -145,6 +145,44 @@ async function initRecipeForm(recipeId) {
             status.textContent = "Couldn't save — you appear to be offline. Try again once you're back in range.";
         }
     });
+}
+
+// ── Recipe view (read-only "notebook page") ─────────────────────────────────────────────────
+
+async function initRecipeView(recipeId) {
+    const box = document.getElementById('notebook-content');
+    if (!box) return;
+    document.getElementById('edit-link').href = `/recipes/${recipeId}/edit`;
+
+    let r;
+    try {
+        const res = await fetch(`/api/recipes/${recipeId}`);
+        if (!res.ok) throw new Error();
+        r = await res.json();
+    } catch {
+        box.innerHTML = '<div class="text-center text-sm py-8 opacity-70">Couldn\'t load this recipe — you appear to be offline.</div>';
+        return;
+    }
+
+    const ingredientItems = (r.ingredients || '').split('\n').map(s => s.trim()).filter(Boolean);
+
+    box.innerHTML = `
+        <div class="text-2xl font-extrabold leading-tight">${r.title}</div>
+        ${r.game_type ? `<div class="text-sm font-extrabold uppercase tracking-wide mt-1" style="color:#7a2f00">${r.game_type}</div>` : ''}
+        ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-base mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
+        ${ingredientItems.length ? `
+            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Ingredients</div>
+            <ul class="list-disc pl-5 mt-1 space-y-0.5">${ingredientItems.map(i => `<li class="text-base font-semibold">${i}</li>`).join('')}</ul>
+        ` : ''}
+        ${r.instructions ? `
+            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Instructions</div>
+            <p class="text-base mt-1 whitespace-pre-wrap leading-relaxed font-semibold">${r.instructions}</p>
+        ` : ''}
+        ${r.notes ? `
+            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Notes</div>
+            <p class="text-base mt-1 whitespace-pre-wrap leading-relaxed font-semibold">${r.notes}</p>
+        ` : ''}
+    `;
 }
 
 document.addEventListener('DOMContentLoaded', loadRecipesList);

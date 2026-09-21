@@ -12,7 +12,7 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v4';
+const SW_VERSION = 'v8';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;
@@ -27,6 +27,10 @@ const STATIC_URLS = [
   '/static/images/background.png',
   '/static/images/background-widescreen.png',
   '/static/images/phone-background.png',
+  '/static/images/logbook_background.jpeg',
+  '/static/images/phone_logbook_background.jpeg',
+  '/static/images/recipes-background-widescreen.jpeg',
+  '/static/images/phone-recipes-background.jpeg',
   '/static/hunting.js',
   '/static/logbook.js',
   '/static/recipes.js',
@@ -37,9 +41,10 @@ const CROSS_ORIGIN_URLS = [
   'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
 ];
 
-// Exact-match shell routes (server ignores no query string for these). /logbook/{id}/edit is
-// deliberately NOT included — editing a past entry needs a live fetch of that entry anyway (see
-// logbook.js), so there's no offline-editing scenario this shell cache would actually serve.
+// Exact-match shell routes (server ignores no query string for these). /logbook/{id},
+// /logbook/{id}/edit, /recipes/{id}, and /recipes/{id}/edit are deliberately NOT included —
+// viewing or editing a past entry/recipe needs a live fetch of it anyway (see logbook.js and
+// recipes.js), so there's no offline scenario this shell cache would actually serve for any.
 const SHELL_EXACT = ['/', '/index.html', '/hunting', '/logbook', '/logbook/new', '/recipes', '/recipes/new'];
 
 // The hunting reference data and the user's own logbook entries — small, always network-first
