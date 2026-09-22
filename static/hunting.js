@@ -11,7 +11,7 @@ function toggleUserMenu(id) {
     menu.classList.toggle('hidden');
     if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
-['user-menu'].forEach(id => {
+['user-menu', 'mobile-user-menu'].forEach(id => {
     const menu = document.getElementById(id);
     if (!menu) return;
     document.addEventListener('click', e => {
@@ -22,6 +22,19 @@ function toggleUserMenu(id) {
         }
     });
 });
+
+function openMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.remove('hidden');
+    d.classList.add('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.remove('hidden');
+}
+function closeMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.add('hidden');
+    d.classList.remove('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.add('hidden');
+}
 
 let huntingStates = [];
 let currentStateId = null;

@@ -24,7 +24,64 @@
 
 <div id="bg-layer"></div>
 
-<header class="flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
+<!-- Mobile header (below lg) -->
+<header class="lg:hidden flex items-center justify-between gap-3 px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50">
+    <div class="flex items-center gap-3 min-w-0">
+        <button onclick="openMobileNav()" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition cursor-pointer shrink-0" aria-label="Open menu">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+        <a href="/" class="flex items-center gap-2 min-w-0 cursor-pointer">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-7 w-auto drop-shadow-lg shrink-0">
+            <span class="text-orange-500 font-black text-sm tracking-wide truncate">Hunting, Blogging &amp; Cooking</span>
+        </a>
+    </div>
+    <div class="relative shrink-0">
+        <button onclick="toggleUserMenu('mobile-user-menu')" class="flex items-center gap-1.5 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition cursor-pointer">
+            <span class="text-sm">⚙️</span>
+            <span id="mobile-user-menu-arrow" class="text-gray-500 text-xs transition-transform duration-200">▼</span>
+        </button>
+        <div id="mobile-user-menu" class="hidden absolute top-full right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+            {% if user.is_admin %}
+            <a href="/admin/users" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition">👤 Users</a>
+            <a href="/admin/hunting" class="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-300 hover:bg-orange-900/30 transition">🌲 Add Hunting Data</a>
+            <a href="/admin/backup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-green-300 hover:bg-green-900/30 transition">💾 Backup</a>
+            {% if upgrade_available %}<a href="/admin/upgrade" class="flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-300 hover:bg-cyan-900/30 transition">🚀 Upgrade</a>{% endif %}
+            <a href="/admin/phone-setup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-purple-300 hover:bg-purple-900/30 transition">📱 Phone/Tablet Setup</a>
+            {% endif %}
+            <a href="/logout" class="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/40 transition">🚪 Sign Out</a>
+        </div>
+    </div>
+</header>
+
+<!-- Mobile nav drawer — opened by the hamburger button above; closed by the overlay, the ✕
+     button, or by tapping any link in it (closeMobileNav() calls below). -->
+<aside id="mobile-nav-drawer" class="hidden lg:hidden fixed inset-y-0 left-0 w-64 bg-gray-900 border-r border-gray-800 z-50 p-3 gap-2 overflow-y-auto">
+    <div class="flex items-center justify-between pb-3 mb-1 border-b border-gray-800">
+        <a href="/" class="flex items-center gap-2 cursor-pointer" onclick="closeMobileNav()">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
+            <span class="text-orange-500 font-black text-sm tracking-wide">Hunting, Blogging &amp; Cooking</span>
+        </a>
+        <button onclick="closeMobileNav()" class="p-1.5 rounded-lg hover:bg-gray-800 transition cursor-pointer text-gray-400 hover:text-white" aria-label="Close menu">✕</button>
+    </div>
+        <a href="/hunting" class="flex flex-col px-3 py-1.5 rounded-lg bg-orange-950/60 hover:bg-orange-900/60 border border-orange-800/40 hover:border-orange-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-white">Hunting</span>
+            <span class="text-[10px] text-orange-400/70">Seasons &amp; regulations</span>
+        </a>
+        <a href="/logbook" class="flex flex-col px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-800/40 hover:border-emerald-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-white">Logbook</span>
+            <span class="text-[10px] text-emerald-400/70">Hunts &amp; harvests</span>
+        </a>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-white">Recipes</span>
+            <span class="text-[10px] text-rose-400/70">Wild game cookbook</span>
+        </a>
+</aside>
+<div id="mobile-nav-overlay" onclick="closeMobileNav()" class="hidden lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"></div>
+
+<!-- Desktop header (lg+) -->
+<header class="hidden lg:flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
     <div class="flex items-center gap-1.5 overflow-x-auto">
         <a href="/" class="flex items-center gap-2 pr-4 mr-1.5 border-r border-gray-700 shrink-0 cursor-pointer">
             <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
@@ -74,14 +131,29 @@ function toggleUserMenu(id) {
     menu.classList.toggle('hidden');
     if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
-document.addEventListener('click', e => {
-    const menu = document.getElementById('user-menu');
-    if (menu && !menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
-        menu.classList.add('hidden');
-        const arrow = document.getElementById('user-menu-arrow');
-        if (arrow) arrow.style.transform = '';
-    }
+['user-menu', 'mobile-user-menu'].forEach(id => {
+    document.addEventListener('click', e => {
+        const menu = document.getElementById(id);
+        if (menu && !menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
+            menu.classList.add('hidden');
+            const arrow = document.getElementById(id + '-arrow');
+            if (arrow) arrow.style.transform = '';
+        }
+    });
 });
+
+function openMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.remove('hidden');
+    d.classList.add('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.remove('hidden');
+}
+function closeMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.add('hidden');
+    d.classList.remove('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.add('hidden');
+}
 </script>
 </body>
 </html>
