@@ -4,6 +4,11 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.4.0 - 2026-09-22
+- Added a hamburger menu on phones/tablets — the section links (Hunting, Logbook, Recipes) were
+  only reachable by scrolling the header sideways before; now they open in a proper slide-out
+  menu, matching how Guns & Reloading does it.
+
 ## 0.3.0 - 2026-09-21
 - "Show details" on this page now describes changes in plain English instead of raw commit
   messages.

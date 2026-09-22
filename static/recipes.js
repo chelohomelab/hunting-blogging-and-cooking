@@ -11,14 +11,29 @@ function toggleUserMenu(id) {
     menu.classList.toggle('hidden');
     if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
-document.addEventListener('click', e => {
-    const menu = document.getElementById('user-menu');
-    if (menu && !menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
-        menu.classList.add('hidden');
-        const arrow = document.getElementById('user-menu-arrow');
-        if (arrow) arrow.style.transform = '';
-    }
+['user-menu', 'mobile-user-menu'].forEach(id => {
+    document.addEventListener('click', e => {
+        const menu = document.getElementById(id);
+        if (menu && !menu.classList.contains('hidden') && !menu.parentElement.contains(e.target)) {
+            menu.classList.add('hidden');
+            const arrow = document.getElementById(id + '-arrow');
+            if (arrow) arrow.style.transform = '';
+        }
+    });
 });
+
+function openMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.remove('hidden');
+    d.classList.add('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.remove('hidden');
+}
+function closeMobileNav() {
+    const d = document.getElementById('mobile-nav-drawer');
+    d.classList.add('hidden');
+    d.classList.remove('flex', 'flex-col');
+    document.getElementById('mobile-nav-overlay').classList.add('hidden');
+}
 
 // ── Recipes list page ───────────────────────────────────────────────────────────────────────
 
