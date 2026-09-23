@@ -25,14 +25,14 @@
           position: relative;
           flex: 1;
           width: 100%;
-          background-image: url('/static/images/phone-recipes-background.jpeg');
+          background-image: url('/static/images/phone-recipes-background.png');
           background-size: cover;
           background-position: center;
           background-repeat: no-repeat;
       }
       .notebook-content {
           position: absolute;
-          left: 20%; top: 22%; width: 62%; height: 53%;
+          left: 18%; top: 14%; width: 65%; height: 66%;
           overflow-y: auto;
           color: #1c1006;
           font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -46,6 +46,33 @@
       }
       .notebook-content::-webkit-scrollbar { width: 6px; }
       .notebook-content::-webkit-scrollbar-thumb { background: rgba(63,47,30,0.3); border-radius: 3px; }
+
+      /* Recipe-card typography — a serif display title with a small divider, styled to read
+         like a printed recipe card rather than a plain text list (per the reference image the
+         user provided). Section headings share the same serif/underline treatment. */
+      .recipe-title {
+          font-family: Georgia, 'Times New Roman', serif;
+          font-weight: 800;
+          font-size: 1.5rem;
+          line-height: 1.18;
+          text-align: center;
+      }
+      @media (min-width: 1024px) { .recipe-title { font-size: 2rem; } }
+      .recipe-divider { display: flex; align-items: center; gap: 0.6rem; margin: 0.65rem 0; }
+      .recipe-divider div { flex: 1; border-top: 2px solid currentColor; opacity: 0.35; }
+      .recipe-divider span { font-size: 1.1rem; opacity: 0.7; }
+      .recipe-section-heading {
+          font-family: Georgia, 'Times New Roman', serif;
+          font-weight: 800;
+          font-size: 1.05rem;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          border-bottom: 2px solid currentColor;
+          display: inline-block;
+          padding-bottom: 0.15rem;
+          margin-top: 1.15rem;
+          opacity: 0.95;
+      }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-dvh flex flex-col">

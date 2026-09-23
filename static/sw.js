@@ -12,7 +12,7 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v9';
+const SW_VERSION = 'v10';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;
@@ -30,7 +30,7 @@ const STATIC_URLS = [
   '/static/images/logbook_background.jpeg',
   '/static/images/phone_logbook_background.jpeg',
   '/static/images/recipes-background-widescreen.jpeg',
-  '/static/images/phone-recipes-background.jpeg',
+  '/static/images/phone-recipes-background.png',
   '/static/hunting.js',
   '/static/logbook.js',
   '/static/recipes.js',
