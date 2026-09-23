@@ -103,7 +103,7 @@ def list_hunting_game_types(state_id: int, db: Session = Depends(get_db)):
 @router.get("/hunting", response_class=HTMLResponse)
 async def hunting_page(request: Request):
     return templates.TemplateResponse("hunting.html", {
-        "request": request, "user": request.state.user,
+        "request": request, "user": request.state.user, "game_types": GAME_TYPES,
     })
 
 

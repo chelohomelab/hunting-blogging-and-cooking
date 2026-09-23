@@ -193,19 +193,26 @@ async function loadLogbookList() {
     if (!all.length) { list.innerHTML = ''; return; }
 
     list.innerHTML = all.map(e => {
+        const isTrip = (e.day_count || 0) > 0;
         const tag = e._pending ? 'div' : 'a';
-        const hrefAttr = e._pending ? '' : `href="/logbook/${e.id}"`;
+        const href = isTrip ? `/logbook/trip/${e.id}` : `/logbook/${e.id}`;
+        const hrefAttr = e._pending ? '' : `href="${href}"`;
+        const titleLine = isTrip
+            ? `${(e.scheduled_hunt && e.scheduled_hunt.label) || e.location_label || 'Trip'}`
+            : `${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}`;
+        const dayBadge = isTrip ? `<span class="text-[10px] font-bold bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded">🏕️ ${e.day_count} day${e.day_count === 1 ? '' : 's'}</span>` : '';
         return `
         <${tag} ${hrefAttr} class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 transition ${e._pending ? '' : 'hover:border-orange-500/40 cursor-pointer'}">
             <div class="flex items-center justify-between gap-2 flex-wrap">
-                <div class="text-sm font-bold text-orange-400">${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}</div>
+                <div class="text-sm font-bold text-orange-400">${titleLine}</div>
                 <div class="flex items-center gap-2">
                     ${e._pending ? '<span class="text-[10px] font-bold bg-yellow-900/60 text-yellow-300 px-2 py-0.5 rounded">⏳ Pending sync</span>' : ''}
+                    ${dayBadge}
                     ${e.harvested ? '<span class="text-[10px] font-bold bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded">🏹 Harvest</span>' : ''}
                 </div>
             </div>
             <div class="text-xs text-gray-400">${[e.game_type, e.species, e.weapon].filter(Boolean).join(' · ') || '—'}</div>
-            <div class="text-xs text-gray-500">${[e.weather_conditions, e.weather_temp_f != null ? e.weather_temp_f + '°F' : null, e.wind_direction ? 'wind ' + e.wind_direction : null, e.moon_phase].filter(Boolean).join(' · ')}</div>
+            ${!isTrip ? `<div class="text-xs text-gray-500">${[e.weather_conditions, e.weather_temp_f != null ? e.weather_temp_f + '°F' : null, e.wind_direction ? 'wind ' + e.wind_direction : null, e.moon_phase].filter(Boolean).join(' · ')}</div>` : ''}
             ${e.narrative ? `<p class="text-sm text-gray-300 mt-1 line-clamp-3">${e.narrative}</p>` : ''}
             ${(e.media && e.media.length) ? `<div class="flex gap-1.5 mt-1">${
                 e.media.slice(0, 4).map(m => m.media_type === 'video'
@@ -423,6 +430,398 @@ async function initLogbookView(entryId) {
                 : `<img src="${m.file_path}" class="w-full rounded shadow object-cover cursor-pointer" onclick="window.open('${m.file_path}', '_blank')">`
             ).join('')
         }</div>` : ''}
+    `;
+}
+
+// ── Trip entries — a multi-day hunt logged against a Scheduled Hunt (see database.py's
+// ScheduledHunt/HuntLogDay docstrings and docs/VISION.md's 2026-09-23 discussion). Creating the
+// trip itself (via "Log this hunt" on the Hunting page) needs a connection, but every day added
+// after that reuses the exact same submitEntry()/flushQueue() offline queue as a normal entry —
+// it doesn't care what shape the payload is, only that it's a {method, url, payload} triple.
+
+let _tripEntryId = null;
+let _tripDays = [];
+
+function _dayIdFromQueueUrl(url) {
+    const m = url.match(/\/days\/(\d+)/);
+    return m ? Number(m[1]) : null;
+}
+
+function tripPendingDays(entryId) {
+    const re = new RegExp(`^/api/logbook/${entryId}/days`);
+    return getQueue()
+        .filter(q => re.test(q.url))
+        .map(q => ({ ...q.payload, _pending: true, _localId: q.localId, _isUpdate: q.method === 'PUT', _updateUrl: q.url }));
+}
+
+function mediaItemHtmlForDay(m) {
+    const inner = m.media_type === 'video'
+        ? `<video src="${m.file_path}" controls class="w-full h-28 object-cover rounded-lg bg-black"></video>`
+        : `<img src="${m.file_path}" class="w-full h-28 object-cover rounded-lg">`;
+    return `<div class="relative group" data-media-id="${m.id}">${inner}
+        <button type="button" data-delete-day-media="${m.id}" class="absolute top-1 right-1 bg-red-900/80 hover:bg-red-800 text-white text-xs w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer">×</button>
+    </div>`;
+}
+
+async function initTripForm(entryId) {
+    _tripEntryId = entryId;
+    let e;
+    try {
+        const res = await fetch(`/api/logbook/${entryId}`);
+        if (!res.ok) throw new Error();
+        e = await res.json();
+    } catch {
+        document.getElementById('trip-plan-label').textContent = "Couldn't load this trip — you appear to be offline and it hasn't been viewed here before.";
+        return;
+    }
+
+    document.getElementById('trip-view-link').href = `/logbook/trip/${entryId}`;
+    document.getElementById('trip-plan-label').textContent = e.scheduled_hunt
+        ? `${e.scheduled_hunt.label} · ${fmtDate(e.scheduled_hunt.start_date)} – ${fmtDate(e.scheduled_hunt.end_date)}`
+        : 'Trip (no longer linked to a scheduled hunt plan)';
+    document.getElementById('trip-location').value = e.location_label || '';
+    document.getElementById('trip-narrative').value = e.narrative || '';
+    _tripDays = e.days || [];
+    renderTripDaysList();
+
+    document.getElementById('day-date').addEventListener('change', recomputeDayMoon);
+
+    document.getElementById('day-btn-locate').addEventListener('click', () => {
+        const status = document.getElementById('day-loc-status');
+        if (!navigator.geolocation) { status.textContent = 'GPS not available on this device/browser.'; return; }
+        status.textContent = 'Getting location…';
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                document.getElementById('day-lat').value = pos.coords.latitude;
+                document.getElementById('day-lng').value = pos.coords.longitude;
+                status.textContent = `📍 ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+            },
+            () => { status.textContent = 'Could not get location — GPS may be off, or permission denied.'; },
+            { enableHighAccuracy: true, timeout: 15000 }
+        );
+    });
+
+    document.getElementById('day-harvested').addEventListener('change', ev => {
+        document.getElementById('day-harvest-notes-wrap').classList.toggle('hidden', !ev.target.checked);
+    });
+
+    document.getElementById('day-btn-draft').addEventListener('click', () => {
+        const textarea = document.getElementById('day-narrative');
+        textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + draftDayNarrative();
+        textarea.focus();
+    });
+
+    document.getElementById('day-media-grid').addEventListener('click', async ev => {
+        const btn = ev.target.closest('[data-delete-day-media]');
+        const dayId = document.getElementById('day-id').value;
+        if (!btn || !dayId) return;
+        if (!confirm('Remove this photo/video?')) return;
+        try {
+            await fetch(`/api/logbook/${entryId}/days/${dayId}/media/${btn.dataset.deleteDayMedia}`, { method: 'DELETE' });
+            btn.closest('[data-media-id]')?.remove();
+            const d = _tripDays.find(x => x.id === Number(dayId));
+            if (d) d.media = (d.media || []).filter(m => m.id !== Number(btn.dataset.deleteDayMedia));
+        } catch {
+            alert("Couldn't delete — you appear to be offline.");
+        }
+    });
+
+    document.getElementById('day-media-file-input').addEventListener('change', async ev => {
+        const dayId = document.getElementById('day-id').value;
+        const files = Array.from(ev.target.files);
+        ev.target.value = '';
+        if (!dayId) return;
+        const grid = document.getElementById('day-media-grid');
+        for (const file of files) {
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const res = await fetch(`/api/logbook/${entryId}/days/${dayId}/media`, { method: 'POST', body: fd });
+                if (res.ok) {
+                    const m = await res.json();
+                    grid.insertAdjacentHTML('beforeend', mediaItemHtmlForDay(m));
+                    const d = _tripDays.find(x => x.id === Number(dayId));
+                    if (d) { d.media = d.media || []; d.media.push(m); }
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    alert(`Upload failed: ${err.detail || 'unknown error'}`);
+                }
+            } catch {
+                alert("Couldn't upload — you appear to be offline. Try again once you're back in range.");
+            }
+        }
+    });
+
+    document.getElementById('day-btn-delete').addEventListener('click', async () => {
+        const dayId = document.getElementById('day-id').value;
+        if (!dayId || !confirm('Delete this day? This cannot be undone.')) return;
+        try {
+            await fetch(`/api/logbook/${entryId}/days/${dayId}`, { method: 'DELETE' });
+        } catch {
+            alert("Couldn't delete — you appear to be offline.");
+            return;
+        }
+        _tripDays = _tripDays.filter(d => d.id !== Number(dayId));
+        hideDayForm();
+        renderTripDaysList();
+    });
+
+    document.getElementById('trip-btn-summary').addEventListener('click', () => {
+        document.getElementById('trip-narrative').value = generateTripSummary();
+    });
+}
+
+function renderTripDaysList() {
+    const list = document.getElementById('days-list');
+    if (!list) return;
+    const pending = tripPendingDays(_tripEntryId);
+    const pendingEditDayIds = new Set(pending.filter(p => p._isUpdate).map(p => _dayIdFromQueueUrl(p._updateUrl)).filter(Boolean));
+    const pendingNew = pending.filter(p => !p._isUpdate);
+    const all = [..._tripDays, ...pendingNew];
+
+    document.getElementById('days-empty').classList.toggle('hidden', all.length > 0);
+    document.getElementById('days-heading').textContent = `Days (${_tripDays.length})`;
+
+    list.innerHTML = all.map(d => {
+        const isPendingNew = !!d._pending;
+        const isPendingEdit = !isPendingNew && pendingEditDayIds.has(d.id);
+        const harvestBadge = d.harvested ? '<span class="text-[10px] font-bold bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded">🏹 Harvest</span>' : '';
+        const syncBadge = (isPendingNew || isPendingEdit) ? '<span class="text-[10px] font-bold bg-yellow-900/60 text-yellow-300 px-2 py-0.5 rounded">⏳ Sync pending</span>' : '';
+        const clickAttr = isPendingNew ? '' : `onclick="showDayForm(${d.id})"`;
+        return `
+        <div ${clickAttr} class="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-1.5 transition ${isPendingNew ? '' : 'cursor-pointer hover:border-orange-500/40'}">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="text-sm font-bold text-orange-400">${fmtDate(d.hunt_date)}${d.location_label ? ' — ' + d.location_label : ''}</div>
+                <div class="flex gap-1.5">${harvestBadge}${syncBadge}</div>
+            </div>
+            <div class="text-xs text-gray-500">${[d.weather_conditions, d.weather_temp_f != null ? d.weather_temp_f + '°F' : null, d.moon_phase].filter(Boolean).join(' · ')}</div>
+            ${d.narrative ? `<p class="text-sm text-gray-300 line-clamp-2">${d.narrative}</p>` : ''}
+            ${(d.media && d.media.length) ? `<div class="flex gap-1.5 mt-1">${d.media.slice(0, 4).map(m => m.media_type === 'video'
+                ? `<div class="w-10 h-10 rounded bg-gray-800 flex items-center justify-center text-sm">🎬</div>`
+                : `<img src="${m.file_path}" class="w-10 h-10 object-cover rounded">`
+            ).join('')}</div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function recomputeDayMoon() {
+    const dateInput = document.getElementById('day-date');
+    if (!dateInput.value) return;
+    const phase = moonPhaseFor(dateInput.value);
+    document.getElementById('day-moon-phase-display').textContent = phase;
+    document.getElementById('day-moon-phase').value = phase;
+}
+
+function showDayForm(dayId) {
+    const wrap = document.getElementById('day-form-wrap');
+    wrap.classList.remove('hidden');
+    document.getElementById('day-id').value = dayId || '';
+    document.getElementById('day-btn-delete').classList.toggle('hidden', !dayId);
+    document.getElementById('day-form-heading').textContent = dayId ? 'Edit Day' : 'New Day';
+    document.getElementById('day-form-status').textContent = '';
+
+    const d = dayId ? _tripDays.find(x => x.id === dayId) : null;
+    document.getElementById('day-date').value = d ? d.hunt_date : new Date().toISOString().slice(0, 10);
+    recomputeDayMoon();
+    document.getElementById('day-location-label').value = (d && d.location_label) || '';
+    document.getElementById('day-lat').value = (d && d.latitude != null) ? d.latitude : '';
+    document.getElementById('day-lng').value = (d && d.longitude != null) ? d.longitude : '';
+    document.getElementById('day-loc-status').textContent = (d && d.latitude != null)
+        ? `📍 ${d.latitude.toFixed(5)}, ${d.longitude.toFixed(5)}`
+        : 'Not captured — works with zero cell signal, just needs device GPS.';
+    document.getElementById('day-temp').value = (d && d.weather_temp_f != null) ? d.weather_temp_f : '';
+    document.getElementById('day-conditions').value = (d && d.weather_conditions) || '';
+    document.getElementById('day-wind-dir').value = (d && d.wind_direction) || '';
+    document.getElementById('day-wind-speed').value = (d && d.wind_speed_mph != null) ? d.wind_speed_mph : '';
+    document.getElementById('day-harvested').checked = !!(d && d.harvested);
+    document.getElementById('day-harvest-notes-wrap').classList.toggle('hidden', !(d && d.harvested));
+    document.getElementById('day-harvest-notes').value = (d && d.harvest_notes) || '';
+    document.getElementById('day-narrative').value = (d && d.narrative) || '';
+
+    if (d) {
+        document.getElementById('day-media-section').classList.remove('hidden');
+        document.getElementById('day-media-hint').classList.add('hidden');
+        document.getElementById('day-media-grid').innerHTML = (d.media || []).map(mediaItemHtmlForDay).join('');
+    } else {
+        document.getElementById('day-media-section').classList.add('hidden');
+        document.getElementById('day-media-hint').classList.remove('hidden');
+        document.getElementById('day-media-grid').innerHTML = '';
+    }
+
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hideDayForm() {
+    document.getElementById('day-form-wrap').classList.add('hidden');
+}
+
+function draftDayNarrative() {
+    const val = id => (document.getElementById(id).value || '').trim();
+    const date = val('day-date');
+    const location = val('day-location-label');
+    const temp = val('day-temp');
+    const conditions = val('day-conditions');
+    const windDir = val('day-wind-dir');
+    const windSpeed = val('day-wind-speed');
+    const moonPhase = (document.getElementById('day-moon-phase-display').textContent || '').trim();
+    const harvested = document.getElementById('day-harvested').checked;
+    const harvestNotes = val('day-harvest-notes');
+
+    const dateLabel = date
+        ? new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+        : 'today';
+
+    const sentences = [`${location ? 'Hunted ' + location + ' on' : 'Out on'} ${dateLabel}.`];
+    const conditionBits = [];
+    if (conditions) conditionBits.push(conditions.toLowerCase());
+    if (temp) conditionBits.push(`${temp}°F`);
+    if (windDir || windSpeed) conditionBits.push(`wind ${windSpeed ? windSpeed + ' mph ' : ''}out of the ${windDir || 'unknown direction'}`.trim());
+    if (conditionBits.length) {
+        sentences.push(`Conditions were ${conditionBits.join(', ')}${moonPhase && moonPhase !== '—' ? `, under a ${moonPhase.toLowerCase()}` : ''}.`);
+    } else if (moonPhase && moonPhase !== '—') {
+        sentences.push(`It was a ${moonPhase.toLowerCase()}.`);
+    }
+    if (harvested) {
+        sentences.push(`Successfully harvested this day.`);
+        if (harvestNotes) sentences.push(harvestNotes);
+    } else {
+        sentences.push('No harvest this day.');
+    }
+    return sentences.join(' ');
+}
+
+function generateTripSummary() {
+    if (!_tripDays.length) return '';
+    const parts = _tripDays.map((d, i) => {
+        const bits = [`Day ${i + 1} (${fmtDate(d.hunt_date)}${d.location_label ? ' — ' + d.location_label : ''})`];
+        if (d.narrative) bits.push(d.narrative);
+        else if (d.harvested) bits.push(`Harvested${d.harvest_notes ? ': ' + d.harvest_notes : '.'}`);
+        else bits.push('No harvest.');
+        return bits.join(': ');
+    });
+    return parts.join('\n\n');
+}
+
+async function saveDay() {
+    const dayId = document.getElementById('day-id').value;
+    const payload = {
+        hunt_date: document.getElementById('day-date').value,
+        location_label: document.getElementById('day-location-label').value || null,
+        latitude: document.getElementById('day-lat').value ? parseFloat(document.getElementById('day-lat').value) : null,
+        longitude: document.getElementById('day-lng').value ? parseFloat(document.getElementById('day-lng').value) : null,
+        weather_temp_f: document.getElementById('day-temp').value ? parseFloat(document.getElementById('day-temp').value) : null,
+        weather_conditions: document.getElementById('day-conditions').value || null,
+        wind_direction: document.getElementById('day-wind-dir').value || null,
+        wind_speed_mph: document.getElementById('day-wind-speed').value ? parseFloat(document.getElementById('day-wind-speed').value) : null,
+        moon_phase: document.getElementById('day-moon-phase').value || null,
+        harvested: document.getElementById('day-harvested').checked,
+        harvest_notes: document.getElementById('day-harvest-notes').value || null,
+        narrative: document.getElementById('day-narrative').value || null,
+    };
+    const status = document.getElementById('day-form-status');
+    if (!payload.hunt_date) {
+        status.textContent = 'Date is required.';
+        return;
+    }
+    status.textContent = 'Saving…';
+    const method = dayId ? 'PUT' : 'POST';
+    const url = dayId ? `/api/logbook/${_tripEntryId}/days/${dayId}` : `/api/logbook/${_tripEntryId}/days`;
+    const result = await submitEntry(payload, method, url);
+    if (result.queued) {
+        status.textContent = "📥 Saved offline — this'll sync automatically once you're back in range.";
+        setTimeout(() => { hideDayForm(); renderTripDaysList(); }, 1200);
+    } else if (result.ok) {
+        const idx = _tripDays.findIndex(x => x.id === result.data.id);
+        if (idx >= 0) _tripDays[idx] = result.data; else _tripDays.push(result.data);
+        if (!dayId) {
+            // New days land back in the (now edit-mode) form so photos can be attached right away.
+            showDayForm(result.data.id);
+            renderTripDaysList();
+            document.getElementById('day-form-status').textContent = 'Saved — you can now add photos below.';
+            return;
+        }
+        hideDayForm();
+        renderTripDaysList();
+    } else {
+        status.textContent = 'Failed to save: ' + (result.error || 'unknown error');
+    }
+}
+
+async function saveTripFields(statusElId) {
+    const status = document.getElementById(statusElId);
+    status.textContent = 'Saving…';
+    try {
+        const res = await fetch(`/api/logbook/${_tripEntryId}/trip`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                location_label: document.getElementById('trip-location').value || null,
+                narrative: document.getElementById('trip-narrative').value || null,
+            }),
+        });
+        status.textContent = res.ok ? 'Saved.' : 'Failed to save.';
+        setTimeout(() => { status.textContent = ''; }, 2000);
+    } catch {
+        status.textContent = "Couldn't save — you appear to be offline.";
+    }
+}
+function saveTripInfo() { saveTripFields('trip-info-status'); }
+function saveTripSummary() { saveTripFields('trip-summary-status'); }
+
+async function deleteTrip() {
+    if (!confirm('Delete this entire trip log, including all days and photos? This cannot be undone.')) return;
+    try {
+        await fetch(`/api/logbook/${_tripEntryId}`, { method: 'DELETE' });
+        window.location.href = '/logbook';
+    } catch {
+        alert("Couldn't delete — you appear to be offline.");
+    }
+}
+
+// ── Trip view (read-only "notebook page") ───────────────────────────────────────────────────
+
+async function initTripView(entryId) {
+    const box = document.getElementById('notebook-content');
+    if (!box) return;
+    document.getElementById('edit-link').href = `/logbook/trip/${entryId}/edit`;
+
+    let e;
+    try {
+        const res = await fetch(`/api/logbook/${entryId}`);
+        if (!res.ok) throw new Error();
+        e = await res.json();
+    } catch {
+        box.innerHTML = '<div class="text-center text-sm py-8 opacity-70">Couldn\'t load this trip — you appear to be offline.</div>';
+        return;
+    }
+
+    const days = e.days || [];
+    const dateRange = e.scheduled_hunt
+        ? (e.scheduled_hunt.start_date === e.scheduled_hunt.end_date
+            ? fmtDate(e.scheduled_hunt.start_date)
+            : `${fmtDate(e.scheduled_hunt.start_date)} – ${fmtDate(e.scheduled_hunt.end_date)}`)
+        : '';
+    const title = (e.scheduled_hunt && e.scheduled_hunt.label) || e.location_label || 'Trip Log';
+
+    box.innerHTML = `
+        <div class="text-2xl font-extrabold leading-tight">${title}</div>
+        <div class="text-sm font-extrabold uppercase tracking-wide mt-1" style="color:#6b3410">${days.length} day${days.length === 1 ? '' : 's'}${dateRange ? ' · ' + dateRange : ''}</div>
+        ${e.location_label ? `<div class="text-base mt-1 font-semibold">${e.location_label}</div>` : ''}
+        ${e.narrative ? `<p class="text-lg mt-3 whitespace-pre-wrap leading-relaxed font-semibold">${e.narrative}</p>` : ''}
+        ${days.map((d, i) => `
+            <div class="trip-day-card">
+                <div class="text-base font-extrabold">Day ${i + 1} — ${fmtDate(d.hunt_date)}${d.location_label ? ' — ' + d.location_label : ''}</div>
+                ${d.harvested ? '<div class="text-sm font-extrabold uppercase tracking-wide mt-0.5" style="color:#7a2f00">🏹 Harvest</div>' : ''}
+                ${[d.weather_conditions, d.weather_temp_f != null ? d.weather_temp_f + '°F' : null, d.moon_phase].filter(Boolean).length ? `<div class="text-sm mt-1 font-semibold">${[d.weather_conditions, d.weather_temp_f != null ? d.weather_temp_f + '°F' : null, d.moon_phase].filter(Boolean).join(' · ')}</div>` : ''}
+                ${d.harvest_notes ? `<p class="text-sm mt-1 font-semibold">${d.harvest_notes}</p>` : ''}
+                ${d.narrative ? `<p class="text-sm mt-2 whitespace-pre-wrap leading-relaxed font-semibold">${d.narrative}</p>` : ''}
+                ${(d.media && d.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-2">${
+                    d.media.map(m => m.media_type === 'video'
+                        ? `<video src="${m.file_path}" controls class="w-full rounded shadow"></video>`
+                        : `<img src="${m.file_path}" class="w-full rounded shadow object-cover cursor-pointer" onclick="window.open('${m.file_path}', '_blank')">`
+                    ).join('')
+                }</div>` : ''}
+            </div>
+        `).join('') || '<p class="text-lg mt-4 opacity-50 italic">No days logged yet.</p>'}
     `;
 }
 

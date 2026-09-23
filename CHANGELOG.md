@@ -4,6 +4,14 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.6.0 - 2026-09-24
+- Scheduled Hunts: plan a trip ahead of time (state, game type, dates, general location) from
+  the Hunting Regulations page, while you've still got signal.
+- Logging a scheduled trip now supports multiple days under one trip log — add a day at a time
+  (each with its own stand location, weather, harvest, and photos), works fully offline once
+  the trip's been started. The Logbook list and the trip's own page show a day count and a
+  generated trip summary alongside each day's own story.
+
 ## 0.5.0 - 2026-09-24
 - Fixed low-contrast text on the Hunting, Logbook, and Recipes pages — the new background art
   had its own title text baked in right where the page's own text renders, so nothing behind it

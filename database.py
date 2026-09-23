@@ -105,10 +105,19 @@ class HuntLogEntry(Base):
     # Weather fields are manual entry for now — auto-fetching historical weather from the
     # captured coordinate+timestamp once back online is a possible future enhancement, deferred
     # pending a provider/API-key decision rather than assumed here.
+    #
+    # scheduled_hunt_id makes this a "trip entry" when set (see ScheduledHunt below): one entry
+    # per trip, holding trip-level fields only (location_label = general area, narrative = trip
+    # summary), with the actual per-day data — including this same set of weather/harvest/
+    # narrative fields — living instead in this entry's `days` (HuntLogDay), one row per day
+    # logged. A plain single-day entry (scheduled_hunt_id is null) is unaffected and keeps using
+    # its own flat fields exactly as before; the two shapes share a table rather than forking
+    # into a separate model so the Logbook list can query/sort both in one pass.
     __tablename__ = "hunt_log_entries"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    hunt_date = Column(String, nullable=False)          # ISO YYYY-MM-DD
+    scheduled_hunt_id = Column(Integer, ForeignKey("scheduled_hunts.id"), nullable=True, index=True)
+    hunt_date = Column(String, nullable=False)          # ISO YYYY-MM-DD; for a trip entry, set once at creation to the trip's start_date so list sorting works unchanged
     location_label = Column(String, nullable=True)       # e.g. "Back 40", a free-text nickname
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -127,7 +136,9 @@ class HuntLogEntry(Base):
     updated_at = Column(String, nullable=True)
 
     user = relationship("User")
+    scheduled_hunt = relationship("ScheduledHunt", back_populates="log_entries")
     media = relationship("HuntLogMedia", back_populates="entry", cascade="all, delete-orphan")
+    days = relationship("HuntLogDay", back_populates="entry", cascade="all, delete-orphan", order_by="HuntLogDay.hunt_date")
 
 
 class HuntLogMedia(Base):
@@ -136,9 +147,14 @@ class HuntLogMedia(Base):
     # tenant-ready reasoning as everywhere else. Deliberately online-only: attaching media from
     # the backcountry doesn't really apply (no camera-to-server path without signal either way),
     # so this is attached once you're back in range, same as the "edit a past entry" flow.
+    # day_id is set instead of being trip-day-specific media's only link — entry_id stays filled
+    # in too (the day's parent entry) so existing entry-scoped queries need no special-casing.
+    # Null day_id (the original/common case) means this photo belongs to the entry as a whole,
+    # exactly as before trip entries existed.
     __tablename__ = "hunt_log_media"
     id = Column(Integer, primary_key=True, index=True)
     entry_id = Column(Integer, ForeignKey("hunt_log_entries.id"), nullable=False, index=True)
+    day_id = Column(Integer, ForeignKey("hunt_log_days.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     media_type = Column(String, nullable=False)   # "photo" or "video"
     file_path = Column(String, nullable=False)     # /static/uploads/... URL
@@ -147,6 +163,65 @@ class HuntLogMedia(Base):
     created_at = Column(String, nullable=False)
 
     entry = relationship("HuntLogEntry", back_populates="media")
+    day = relationship("HuntLogDay", back_populates="media")
+
+
+class ScheduledHunt(Base):
+    # A planned future hunt/trip, created ahead of time while there's still signal, so its
+    # details are already on the device before heading out of range (see docs/VISION.md's
+    # offline-first principles) — the whole point is being selectable from the Logbook once
+    # offline. Deliberately stays around indefinitely after the trip happens (no auto-archive/
+    # complete flag): a multi-day trip is logged as ONE HuntLogEntry that keeps growing more
+    # HuntLogDay rows as each day is logged, potentially over several separate offline sessions,
+    # so there's no single moment a trip becomes "done."
+    #
+    # state/game_type are free text, matching how HuntLogEntry.game_type already works (a
+    # shared constant list drives the picker client-side, not a DB-level FK/enum) — a trip can
+    # be planned for a state before that state has any regulations data loaded here at all.
+    __tablename__ = "scheduled_hunts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    label = Column(String, nullable=False)               # e.g. "Upstate NY — Late October"
+    state = Column(String, nullable=True)
+    game_type = Column(String, nullable=True)
+    start_date = Column(String, nullable=False)          # ISO YYYY-MM-DD
+    end_date = Column(String, nullable=False)
+    location_label = Column(String, nullable=True)        # general trip-level location
+    notes = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    user = relationship("User")
+    log_entries = relationship("HuntLogEntry", back_populates="scheduled_hunt")
+
+
+class HuntLogDay(Base):
+    # One logged day within a multi-day trip (a HuntLogEntry with scheduled_hunt_id set — see
+    # both docstrings above). Mirrors the fields a plain single-day HuntLogEntry uses, since
+    # conceptually each day IS a single-day hunt, just nested under a trip container instead of
+    # standing alone. location_label here is the day's specific stand/spot, distinct from the
+    # trip-level general location on the parent entry.
+    __tablename__ = "hunt_log_days"
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("hunt_log_entries.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    hunt_date = Column(String, nullable=False)           # ISO YYYY-MM-DD
+    location_label = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    weather_temp_f = Column(Float, nullable=True)
+    weather_conditions = Column(String, nullable=True)
+    wind_direction = Column(String, nullable=True)
+    wind_speed_mph = Column(Float, nullable=True)
+    moon_phase = Column(String, nullable=True)
+    harvested = Column(Boolean, default=False)
+    harvest_notes = Column(String, nullable=True)
+    narrative = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
+
+    entry = relationship("HuntLogEntry", back_populates="days")
+    media = relationship("HuntLogMedia", back_populates="day", cascade="all, delete-orphan")
 
 
 class Recipe(Base):
@@ -187,3 +262,6 @@ def init_db():
             with engine.connect() as conn:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
                 conn.commit()
+
+    _add_col("hunt_log_entries", "scheduled_hunt_id", "scheduled_hunt_id INTEGER")
+    _add_col("hunt_log_media", "day_id", "day_id INTEGER")
