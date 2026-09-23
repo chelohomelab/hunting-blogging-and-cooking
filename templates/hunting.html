@@ -152,18 +152,20 @@
                     <input type="date" id="sh-end-date" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500">
                 </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">State</label>
-                    <input type="text" id="sh-state" placeholder="e.g. New York"
-                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Game Type</label>
-                    <select id="sh-game-type" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500">
-                        <option value="">—</option>
-                        {% for g in game_types %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
-                    </select>
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">State</label>
+                <select id="sh-state" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500">
+                    <option value="">—</option>
+                    {% for s in us_states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Game Type(s)</label>
+                <div id="sh-game-type-pills" class="flex flex-wrap gap-1.5">
+                    {% for g in game_types %}
+                    <button type="button" data-game-type="{{ g }}" onclick="toggleShGameType(this)"
+                        class="px-2.5 py-1 rounded-full text-xs font-bold border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 transition cursor-pointer">{{ g }}</button>
+                    {% endfor %}
                 </div>
             </div>
             <div>

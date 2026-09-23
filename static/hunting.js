@@ -308,6 +308,37 @@ function renderScheduledHuntsList() {
     }).join('');
 }
 
+// Game type on a Scheduled Hunt can be more than one (e.g. a trip open on both Deer and Bear)
+// — stored as a single comma-separated string in the same free-text game_type column other
+// tables already use (see ScheduledHunt's docstring), not a separate table, to keep this simple.
+// The pill buttons themselves carry the selection state via a data attribute rather than a
+// hidden input, since there's no single "value" to hold — read/write helpers below translate
+// to/from the CSV string the API actually stores.
+
+function toggleShGameType(btn) {
+    btn.classList.toggle('sh-gt-active');
+    const active = btn.classList.contains('sh-gt-active');
+    btn.classList.toggle('bg-orange-600', active);
+    btn.classList.toggle('border-orange-500', active);
+    btn.classList.toggle('text-white', active);
+    btn.classList.toggle('bg-gray-700', !active);
+    btn.classList.toggle('border-gray-600', !active);
+    btn.classList.toggle('text-gray-300', !active);
+}
+
+function getSelectedShGameTypes() {
+    return Array.from(document.querySelectorAll('#sh-game-type-pills [data-game-type].sh-gt-active'))
+        .map(b => b.dataset.gameType);
+}
+
+function setSelectedShGameTypes(csv) {
+    const selected = new Set((csv || '').split(',').map(s => s.trim()).filter(Boolean));
+    document.querySelectorAll('#sh-game-type-pills [data-game-type]').forEach(btn => {
+        const shouldBeActive = selected.has(btn.dataset.gameType);
+        if (shouldBeActive !== btn.classList.contains('sh-gt-active')) toggleShGameType(btn);
+    });
+}
+
 function toggleScheduledHuntForm() {
     const wrap = document.getElementById('scheduled-hunt-form-wrap');
     const opening = wrap.classList.contains('hidden');
@@ -318,7 +349,7 @@ function toggleScheduledHuntForm() {
         document.getElementById('sh-start-date').value = '';
         document.getElementById('sh-end-date').value = '';
         document.getElementById('sh-state').value = '';
-        document.getElementById('sh-game-type').value = '';
+        setSelectedShGameTypes('');
         document.getElementById('sh-location').value = '';
         document.getElementById('sh-notes').value = '';
         document.getElementById('sh-delete-btn').classList.add('hidden');
@@ -335,7 +366,7 @@ function editScheduledHunt(id) {
     document.getElementById('sh-start-date').value = h.start_date || '';
     document.getElementById('sh-end-date').value = h.end_date || '';
     document.getElementById('sh-state').value = h.state || '';
-    document.getElementById('sh-game-type').value = h.game_type || '';
+    setSelectedShGameTypes(h.game_type || '');
     document.getElementById('sh-location').value = h.location_label || '';
     document.getElementById('sh-notes').value = h.notes || '';
     document.getElementById('sh-delete-btn').classList.remove('hidden');
@@ -356,7 +387,7 @@ async function saveScheduledHunt() {
     const payload = {
         label, start_date: startDate, end_date: endDate,
         state: document.getElementById('sh-state').value || null,
-        game_type: document.getElementById('sh-game-type').value || null,
+        game_type: getSelectedShGameTypes().join(', ') || null,
         location_label: document.getElementById('sh-location').value || null,
         notes: document.getElementById('sh-notes').value || null,
     };
