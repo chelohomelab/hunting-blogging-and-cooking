@@ -343,6 +343,7 @@ function toggleScheduledHuntForm() {
     const wrap = document.getElementById('scheduled-hunt-form-wrap');
     const opening = wrap.classList.contains('hidden');
     wrap.classList.toggle('hidden');
+    document.getElementById('sh-new-btn').classList.toggle('hidden', opening);
     if (opening) {
         document.getElementById('sh-id').value = '';
         document.getElementById('sh-label').value = '';
@@ -361,6 +362,7 @@ function editScheduledHunt(id) {
     const h = scheduledHuntsCache.find(x => x.id === id);
     if (!h) return;
     document.getElementById('scheduled-hunt-form-wrap').classList.remove('hidden');
+    document.getElementById('sh-new-btn').classList.add('hidden');
     document.getElementById('sh-id').value = h.id;
     document.getElementById('sh-label').value = h.label || '';
     document.getElementById('sh-start-date').value = h.start_date || '';
