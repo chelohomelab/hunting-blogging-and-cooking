@@ -12,7 +12,7 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v10';
+const SW_VERSION = 'v11';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;
@@ -42,9 +42,10 @@ const CROSS_ORIGIN_URLS = [
 ];
 
 // Exact-match shell routes (server ignores no query string for these). /logbook/{id},
-// /logbook/{id}/edit, /recipes/{id}, and /recipes/{id}/edit are deliberately NOT included —
-// viewing or editing a past entry/recipe needs a live fetch of it anyway (see logbook.js and
-// recipes.js), so there's no offline scenario this shell cache would actually serve for any.
+// /logbook/{id}/edit, /logbook/trip/{id}, /logbook/trip/{id}/edit, /recipes/{id}, and
+// /recipes/{id}/edit are deliberately NOT included — viewing or editing a past entry/trip/
+// recipe needs a live fetch of it anyway (see logbook.js and recipes.js), so there's no offline
+// scenario this shell cache would actually serve for any.
 const SHELL_EXACT = ['/', '/index.html', '/hunting', '/logbook', '/logbook/new', '/recipes', '/recipes/new'];
 
 // The hunting reference data and the user's own logbook entries — small, always network-first
@@ -58,6 +59,8 @@ const DATA_PATTERNS = [
   /^\/hunting\/states\/\d+\/game-types$/,
   /^\/api\/logbook$/,
   /^\/api\/logbook\/\d+$/,
+  /^\/api\/scheduled-hunts$/,
+  /^\/api\/scheduled-hunts\/\d+$/,
   /^\/api\/recipes$/,
   /^\/api\/recipes\/\d+$/,
   /^\/api\/recipes\/harvest-options$/,

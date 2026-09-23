@@ -14,6 +14,20 @@ router = APIRouter()
 
 GAME_TYPES = ["Deer", "Black Bear", "Elk", "Turkey", "Upland Birds", "Small Game", "Migratory Birds", "Trapping"]
 
+# All 50 states for the Scheduled Hunts state picker — deliberately not limited to SEED_STATES
+# below (the states with regulations data actually loaded): a trip can be planned for a state
+# before its regs data exists here at all, see ScheduledHunt's docstring in database.py.
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+    "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
+    "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+    "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
+    "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+    "Wisconsin", "Wyoming",
+]
+
 # One hand-transcribed seed script per state under scripts/hunting_data_seeds/ — each wipes and
 # re-inserts just that state's rows, so it's safe to re-run (e.g. after a season's data is fixed).
 SEED_STATES = {
@@ -103,7 +117,7 @@ def list_hunting_game_types(state_id: int, db: Session = Depends(get_db)):
 @router.get("/hunting", response_class=HTMLResponse)
 async def hunting_page(request: Request):
     return templates.TemplateResponse("hunting.html", {
-        "request": request, "user": request.state.user,
+        "request": request, "user": request.state.user, "game_types": GAME_TYPES, "us_states": US_STATES,
     })
 
 

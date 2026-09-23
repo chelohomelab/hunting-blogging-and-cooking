@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trip Log — Hunting, Blogging and Cooking</title>
+    <link rel="icon" type="image/png" href="/static/images/app-icon.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+      }
+    </script>
+    <style>
+      body { background-color: #0f0f0f; }
+
+      /* Same treatment as the single-entry notebook view — see that template's comment. */
+      .notebook-frame {
+          position: relative;
+          flex: 1;
+          width: 100%;
+          background-image: url('/static/images/phone_logbook_background.jpeg');
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+      }
+      .notebook-content {
+          position: absolute;
+          left: 22%; top: 17%; width: 57%; height: 52%;
+          overflow-y: auto;
+          color: #1c1006;
+          font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+          font-size: 1.1rem;
+          font-weight: 600;
+          text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+      }
+      @media (min-width: 1024px) {
+          .notebook-frame { background-image: url('/static/images/logbook_background.jpeg'); }
+          .notebook-content { left: 25%; top: 22%; width: 49%; height: 58%; font-size: 1.4rem; }
+      }
+      .notebook-content::-webkit-scrollbar { width: 6px; }
+      .notebook-content::-webkit-scrollbar-thumb { background: rgba(63,47,30,0.3); border-radius: 3px; }
+      .trip-day-card { border-top: 2px dashed rgba(63,47,30,0.3); padding-top: 0.75rem; margin-top: 0.75rem; }
+      .trip-day-card:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-dvh flex flex-col">
+
+<!-- Mobile header (below lg) -->
+<header class="lg:hidden flex items-center justify-between gap-3 px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50">
+    <div class="flex items-center gap-3 min-w-0">
+        <button onclick="openMobileNav()" class="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition cursor-pointer shrink-0" aria-label="Open menu">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+        <a href="/" class="flex items-center gap-2 min-w-0 cursor-pointer">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-7 w-auto drop-shadow-lg shrink-0">
+            <span class="text-orange-500 font-black text-sm tracking-wide truncate">Hunting, Blogging &amp; Cooking</span>
+        </a>
+    </div>
+    <div class="relative shrink-0">
+        <button onclick="toggleUserMenu('mobile-user-menu')" class="flex items-center gap-1.5 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition cursor-pointer">
+            <span class="text-sm">⚙️</span>
+            <span id="mobile-user-menu-arrow" class="text-gray-500 text-xs transition-transform duration-200">▼</span>
+        </button>
+        <div id="mobile-user-menu" class="hidden absolute top-full right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+            {% if user.is_admin %}
+            <a href="/admin/users" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition">👤 Users</a>
+            <a href="/admin/hunting" class="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-300 hover:bg-orange-900/30 transition">🌲 Add Hunting Data</a>
+            <a href="/admin/backup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-green-300 hover:bg-green-900/30 transition">💾 Backup</a>
+            {% if upgrade_available %}<a href="/admin/upgrade" class="flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-300 hover:bg-cyan-900/30 transition">🚀 Upgrade</a>{% endif %}
+            <a href="/admin/phone-setup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-purple-300 hover:bg-purple-900/30 transition">📱 Phone/Tablet Setup</a>
+            {% endif %}
+            <a href="/logout" class="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/40 transition">🚪 Sign Out</a>
+        </div>
+    </div>
+</header>
+
+<!-- Mobile nav drawer — opened by the hamburger button above; closed by the overlay, the ✕
+     button, or by tapping any link in it (closeMobileNav() calls below). -->
+<aside id="mobile-nav-drawer" class="hidden lg:hidden fixed inset-y-0 left-0 w-64 bg-gray-900 border-r border-gray-800 z-50 p-3 gap-2 overflow-y-auto">
+    <div class="flex items-center justify-between pb-3 mb-1 border-b border-gray-800">
+        <a href="/" class="flex items-center gap-2 cursor-pointer" onclick="closeMobileNav()">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
+            <span class="text-orange-500 font-black text-sm tracking-wide">Hunting, Blogging &amp; Cooking</span>
+        </a>
+        <button onclick="closeMobileNav()" class="p-1.5 rounded-lg hover:bg-gray-800 transition cursor-pointer text-gray-400 hover:text-white" aria-label="Close menu">✕</button>
+    </div>
+        <a href="/hunting" class="flex flex-col px-3 py-1.5 rounded-lg bg-orange-950/60 hover:bg-orange-900/60 border border-orange-800/40 hover:border-orange-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-white">Hunting</span>
+            <span class="text-[10px] text-orange-400/70">Seasons &amp; regulations</span>
+        </a>
+        <a href="/logbook" class="flex flex-col px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-emerald-400">Logbook</span>
+            <span class="text-[10px] text-emerald-500/60">Hunts &amp; harvests</span>
+        </a>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition" onclick="closeMobileNav()">
+            <span class="text-sm font-bold text-white">Recipes</span>
+            <span class="text-[10px] text-rose-400/70">Wild game cookbook</span>
+        </a>
+</aside>
+<div id="mobile-nav-overlay" onclick="closeMobileNav()" class="hidden lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"></div>
+
+<!-- Desktop header (lg+) -->
+<header class="hidden lg:flex items-center justify-between px-4 py-2 bg-gray-900/95 border-b border-gray-800 sticky top-0 z-50 gap-3">
+    <div class="flex items-center gap-1.5 overflow-x-auto">
+        <a href="/" class="flex items-center gap-2 pr-4 mr-1.5 border-r border-gray-700 shrink-0 cursor-pointer">
+            <img src="/static/images/logo.png" alt="HB&amp;C" class="h-8 w-auto drop-shadow-lg">
+            <span class="text-orange-500 font-black text-lg tracking-wide">Hunting, Blogging &amp; Cooking</span>
+        </a>
+        <a href="/hunting" class="flex flex-col px-3 py-1.5 rounded-lg bg-orange-950/60 hover:bg-orange-900/60 border border-orange-800/40 hover:border-orange-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Hunting</span>
+            <span class="text-[10px] text-orange-400/70">Seasons &amp; regulations</span>
+        </a>
+        <a href="/logbook" class="flex flex-col px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-emerald-400">Logbook</span>
+            <span class="text-[10px] text-emerald-500/60">Hunts &amp; harvests</span>
+        </a>
+        <a href="/recipes" class="flex flex-col px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/40 hover:border-rose-500/40 transition shrink-0">
+            <span class="text-sm font-bold text-white">Recipes</span>
+            <span class="text-[10px] text-rose-400/70">Wild game cookbook</span>
+        </a>
+    </div>
+    <div class="relative shrink-0">
+        <button onclick="toggleUserMenu('user-menu')" class="flex items-center gap-1.5 px-2.5 py-2 rounded-lg hover:bg-gray-800 transition cursor-pointer">
+            <span class="text-sm">⚙️</span>
+            <span class="text-sm font-medium text-gray-300">{{ user.username }}</span>
+            <span id="user-menu-arrow" class="text-gray-500 text-xs transition-transform duration-200">▼</span>
+        </button>
+        <div id="user-menu" class="hidden absolute top-full right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-50">
+            {% if user.is_admin %}
+            <a href="/admin/users" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition">👤 Users</a>
+            <a href="/admin/hunting" class="flex items-center gap-2 px-4 py-2.5 text-sm text-orange-300 hover:bg-orange-900/30 transition">🌲 Add Hunting Data</a>
+            <a href="/admin/backup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-green-300 hover:bg-green-900/30 transition">💾 Backup</a>
+            {% if upgrade_available %}<a href="/admin/upgrade" class="flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-300 hover:bg-cyan-900/30 transition">🚀 Upgrade</a>{% endif %}
+            <a href="/admin/phone-setup" class="flex items-center gap-2 px-4 py-2.5 text-sm text-purple-300 hover:bg-purple-900/30 transition">📱 Phone/Tablet Setup</a>
+            {% endif %}
+            <a href="/logout" class="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/40 transition">🚪 Sign Out</a>
+        </div>
+    </div>
+</header>
+
+<main class="flex-1 w-full flex flex-col">
+
+    <div class="flex items-center justify-between px-4 py-2 bg-gray-950/80">
+        <a href="/logbook" class="text-sm text-gray-400 hover:text-white transition">← Back to Logbook</a>
+        <a id="edit-link" href="#" class="text-sm text-orange-400 hover:text-orange-300 font-bold transition">✏️ Edit Trip</a>
+    </div>
+
+    <div class="notebook-frame">
+        <div class="notebook-content" id="notebook-content">
+            <div class="text-center text-sm opacity-60 pt-8">Loading…</div>
+        </div>
+    </div>
+
+</main>
+
+<script src="/static/logbook.js?v=1"></script>
+<script>initTripView({{ entry_id | tojson }});</script>
+</body>
+</html>

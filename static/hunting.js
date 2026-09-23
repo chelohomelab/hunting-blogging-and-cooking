@@ -46,7 +46,7 @@ let huntingSeasonEntriesCache = [];
 let huntingCalYear = new Date().getFullYear();
 let huntingCalMonth = new Date().getMonth();
 
-window.onload = () => { fetchHuntingStates(); };
+window.onload = () => { fetchHuntingStates(); loadScheduledHunts(); };
 
 async function fetchHuntingStates() {
     const res = await fetch('/hunting/states');
@@ -259,4 +259,177 @@ function showHuntingDayDetail(day) {
             `).join('');
     }
     detail.classList.remove('hidden');
+}
+
+// ── Scheduled Hunts — trips planned ahead of time. Deliberately online-only to create/edit
+// (see saveScheduledHunt/startLoggingScheduledHunt) — the offline-critical part is that once
+// viewed here with signal, the list is cached by the service worker (see sw.js DATA_PATTERNS)
+// so it's still readable, and "Log this hunt" already resolved, once you're out of range.
+
+let scheduledHuntsCache = [];
+
+async function loadScheduledHunts() {
+    try {
+        const res = await fetch('/api/scheduled-hunts');
+        scheduledHuntsCache = await res.json();
+    } catch {
+        document.getElementById('scheduled-hunts-list').innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Can\'t reach the server.</div>';
+        return;
+    }
+    renderScheduledHuntsList();
+}
+
+function fmtShDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function renderScheduledHuntsList() {
+    const list = document.getElementById('scheduled-hunts-list');
+    document.getElementById('scheduled-hunts-empty').classList.toggle('hidden', scheduledHuntsCache.length > 0);
+    list.innerHTML = scheduledHuntsCache.map(h => {
+        const dateRange = h.start_date === h.end_date ? fmtShDate(h.start_date) : `${fmtShDate(h.start_date)} – ${fmtShDate(h.end_date)}`;
+        const logLabel = h.log_entry_id
+            ? (h.days_logged > 0 ? `📝 ${h.days_logged} day${h.days_logged === 1 ? '' : 's'} logged` : '📝 Continue logging')
+            : '📝 Log this hunt';
+        return `
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-1.5">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="text-sm font-bold text-orange-400">${h.label}</div>
+                <div class="text-xs text-gray-500">${dateRange}</div>
+            </div>
+            <div class="text-xs text-gray-400">${[h.game_type, h.state, h.location_label].filter(Boolean).join(' · ') || '—'}</div>
+            <div class="flex items-center gap-3 pt-1">
+                <button onclick="startLoggingScheduledHunt(${h.id})" class="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition cursor-pointer">${logLabel}</button>
+                <button onclick="editScheduledHunt(${h.id})" class="text-xs text-gray-400 hover:text-white transition cursor-pointer">Edit</button>
+            </div>
+        </div>
+    `;
+    }).join('');
+}
+
+// Game type on a Scheduled Hunt can be more than one (e.g. a trip open on both Deer and Bear)
+// — stored as a single comma-separated string in the same free-text game_type column other
+// tables already use (see ScheduledHunt's docstring), not a separate table, to keep this simple.
+// The pill buttons themselves carry the selection state via a data attribute rather than a
+// hidden input, since there's no single "value" to hold — read/write helpers below translate
+// to/from the CSV string the API actually stores.
+
+function toggleShGameType(btn) {
+    btn.classList.toggle('sh-gt-active');
+    const active = btn.classList.contains('sh-gt-active');
+    btn.classList.toggle('bg-orange-600', active);
+    btn.classList.toggle('border-orange-500', active);
+    btn.classList.toggle('text-white', active);
+    btn.classList.toggle('bg-gray-700', !active);
+    btn.classList.toggle('border-gray-600', !active);
+    btn.classList.toggle('text-gray-300', !active);
+}
+
+function getSelectedShGameTypes() {
+    return Array.from(document.querySelectorAll('#sh-game-type-pills [data-game-type].sh-gt-active'))
+        .map(b => b.dataset.gameType);
+}
+
+function setSelectedShGameTypes(csv) {
+    const selected = new Set((csv || '').split(',').map(s => s.trim()).filter(Boolean));
+    document.querySelectorAll('#sh-game-type-pills [data-game-type]').forEach(btn => {
+        const shouldBeActive = selected.has(btn.dataset.gameType);
+        if (shouldBeActive !== btn.classList.contains('sh-gt-active')) toggleShGameType(btn);
+    });
+}
+
+function toggleScheduledHuntForm() {
+    const wrap = document.getElementById('scheduled-hunt-form-wrap');
+    const opening = wrap.classList.contains('hidden');
+    wrap.classList.toggle('hidden');
+    document.getElementById('sh-new-btn').classList.toggle('hidden', opening);
+    if (opening) {
+        document.getElementById('sh-id').value = '';
+        document.getElementById('sh-label').value = '';
+        document.getElementById('sh-start-date').value = '';
+        document.getElementById('sh-end-date').value = '';
+        document.getElementById('sh-state').value = '';
+        setSelectedShGameTypes('');
+        document.getElementById('sh-location').value = '';
+        document.getElementById('sh-notes').value = '';
+        document.getElementById('sh-delete-btn').classList.add('hidden');
+        document.getElementById('scheduled-hunt-form-status').textContent = '';
+    }
+}
+
+function editScheduledHunt(id) {
+    const h = scheduledHuntsCache.find(x => x.id === id);
+    if (!h) return;
+    document.getElementById('scheduled-hunt-form-wrap').classList.remove('hidden');
+    document.getElementById('sh-new-btn').classList.add('hidden');
+    document.getElementById('sh-id').value = h.id;
+    document.getElementById('sh-label').value = h.label || '';
+    document.getElementById('sh-start-date').value = h.start_date || '';
+    document.getElementById('sh-end-date').value = h.end_date || '';
+    document.getElementById('sh-state').value = h.state || '';
+    setSelectedShGameTypes(h.game_type || '');
+    document.getElementById('sh-location').value = h.location_label || '';
+    document.getElementById('sh-notes').value = h.notes || '';
+    document.getElementById('sh-delete-btn').classList.remove('hidden');
+    document.getElementById('scheduled-hunt-form-status').textContent = '';
+    document.getElementById('scheduled-hunt-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function saveScheduledHunt() {
+    const id = document.getElementById('sh-id').value;
+    const label = document.getElementById('sh-label').value.trim();
+    const startDate = document.getElementById('sh-start-date').value;
+    const endDate = document.getElementById('sh-end-date').value;
+    const status = document.getElementById('scheduled-hunt-form-status');
+    if (!label || !startDate || !endDate) {
+        status.textContent = 'Label, start date, and end date are required.';
+        return;
+    }
+    const payload = {
+        label, start_date: startDate, end_date: endDate,
+        state: document.getElementById('sh-state').value || null,
+        game_type: getSelectedShGameTypes().join(', ') || null,
+        location_label: document.getElementById('sh-location').value || null,
+        notes: document.getElementById('sh-notes').value || null,
+    };
+    status.textContent = 'Saving…';
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/scheduled-hunts/${id}` : '/api/scheduled-hunts';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            status.textContent = 'Failed to save: ' + (err.detail || 'unknown error');
+            return;
+        }
+        toggleScheduledHuntForm();
+        loadScheduledHunts();
+    } catch {
+        status.textContent = "Couldn't save — you appear to be offline. Planning a trip needs a connection.";
+    }
+}
+
+async function deleteScheduledHunt() {
+    const id = document.getElementById('sh-id').value;
+    if (!id) return;
+    if (!confirm('Delete this scheduled hunt? Any days you already logged against it stay in your Logbook, just unlinked from this plan.')) return;
+    await fetch(`/api/scheduled-hunts/${id}`, { method: 'DELETE' });
+    toggleScheduledHuntForm();
+    loadScheduledHunts();
+}
+
+async function startLoggingScheduledHunt(id) {
+    const h = scheduledHuntsCache.find(x => x.id === id);
+    if (h && h.log_entry_id) {
+        window.location.href = `/logbook/trip/${h.log_entry_id}/edit`;
+        return;
+    }
+    try {
+        const res = await fetch(`/api/scheduled-hunts/${id}/log-entry`, { method: 'POST' });
+        const data = await res.json();
+        window.location.href = `/logbook/trip/${data.entry_id}/edit`;
+    } catch {
+        alert("Couldn't start logging — you appear to be offline. This first step needs a connection; once started, adding each day works fully offline.");
+    }
 }
