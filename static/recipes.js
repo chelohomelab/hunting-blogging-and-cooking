@@ -182,20 +182,21 @@ async function initRecipeView(recipeId) {
     const ingredientItems = (r.ingredients || '').split('\n').map(s => s.trim()).filter(Boolean);
 
     box.innerHTML = `
-        <div class="text-2xl font-extrabold leading-tight">${r.title}</div>
-        ${r.game_type ? `<div class="text-sm font-extrabold uppercase tracking-wide mt-1" style="color:#7a2f00">${r.game_type}</div>` : ''}
-        ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-base mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
+        <div class="recipe-title">${r.title}</div>
+        <div class="recipe-divider"><div></div><span>❖</span><div></div></div>
+        ${r.game_type ? `<div class="text-center text-sm font-extrabold uppercase tracking-widest" style="color:#7a2f00">${r.game_type}</div>` : ''}
+        ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-center text-sm mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
         ${ingredientItems.length ? `
-            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Ingredients</div>
-            <ul class="list-disc pl-5 mt-1 space-y-0.5">${ingredientItems.map(i => `<li class="text-base font-semibold">${i}</li>`).join('')}</ul>
+            <div class="recipe-section-heading">Ingredients</div>
+            <ul class="list-disc pl-5 mt-2 space-y-1.5">${ingredientItems.map(i => `<li class="text-base font-semibold leading-snug">${i}</li>`).join('')}</ul>
         ` : ''}
         ${r.instructions ? `
-            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Instructions</div>
-            <p class="text-base mt-1 whitespace-pre-wrap leading-relaxed font-semibold">${r.instructions}</p>
+            <div class="recipe-section-heading">Instructions</div>
+            <p class="text-base mt-2 whitespace-pre-wrap leading-relaxed font-semibold">${r.instructions}</p>
         ` : ''}
         ${r.notes ? `
-            <div class="text-base mt-3 font-extrabold uppercase tracking-wide">Notes</div>
-            <p class="text-base mt-1 whitespace-pre-wrap leading-relaxed font-semibold">${r.notes}</p>
+            <div class="recipe-section-heading">Notes</div>
+            <p class="text-base mt-2 whitespace-pre-wrap leading-relaxed font-semibold">${r.notes}</p>
         ` : ''}
     `;
 }

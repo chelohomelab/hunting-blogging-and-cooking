@@ -4,6 +4,17 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.5.0 - 2026-09-24
+- Fixed low-contrast text on the Hunting, Logbook, and Recipes pages — the new background art
+  had its own title text baked in right where the page's own text renders, so nothing behind it
+  gave it contrast.
+- Renamed the Hunting page to "Hunting Regulations" for clarity.
+- Replaced the recipe page's phone background with a cleaner parchment crop, and restyled
+  recipes to read like a printed recipe card (title, divider, underlined section headings)
+  instead of plain text.
+- Fixed the installed app icon showing a white halo around it compared to how it should look —
+  the icon artwork had a transparent margin instead of filling the icon edge-to-edge.
+
 ## 0.4.0 - 2026-09-22
 - Added a hamburger menu on phones/tablets — the section links (Hunting, Logbook, Recipes) were
   only reachable by scrolling the header sideways before; now they open in a proper slide-out
