@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.2 - 2026-09-24
+- Fixed the Upgrade button silently doing nothing on some devices — the endpoint had started
+  requiring a JSON body that an already-loaded copy of the page didn't send, so the request
+  quietly failed. It's back to accepting the same plain request either way, and the page itself
+  is now marked never-cache so this class of mismatch can't recur.
+
 ## 0.7.1 - 2026-09-24
 - Fixed painfully slow page loads while offline — the service worker's cached pages/data now
   fall back after a short timeout instead of waiting out a full network failure first, which

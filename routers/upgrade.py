@@ -10,7 +10,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 from typing import Optional
 
 from config import templates
@@ -19,13 +18,6 @@ from routers.backup import _load_config, restore_zip_bytes, save_backup_zip
 
 router = APIRouter()
 
-
-class UpgradeTargetIn(BaseModel):
-    # Commit hash to upgrade to — must be one of the stops _version_stops_between() returns
-    # between HEAD and origin/BRANCH, re-validated server-side rather than trusted as-is even
-    # though this endpoint is admin-only. None (the default — an empty {} body is valid) means
-    # "go all the way to the branch tip", the original one-button behavior.
-    target: Optional[str] = None
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # Docker images exclude .git (see .dockerignore) — this self-upgrade mechanism (git fetch/merge +
@@ -253,12 +245,16 @@ def _schedule_restart() -> str:
 @router.get("/admin/upgrade", response_class=HTMLResponse)
 async def upgrade_page(request: Request):
     _require_admin(request)
+    # This page's own JS/markup must never be served stale from the browser's plain HTTP cache
+    # (independent of the service worker, which doesn't intercept this route at all) — a stale
+    # copy calling an old API shape against the current backend is exactly what silently broke
+    # the upgrade button on a phone that hadn't reloaded since a prior version of this page.
     return templates.TemplateResponse("admin-upgrade.html", {
         "request": request,
         "user": request.state.user,
         "git_available": GIT_AVAILABLE,
         "repo_url": REPO_WEB_URL,
-    })
+    }, headers={"Cache-Control": "no-store"})
 
 
 # ── Check for updates ────────────────────────────────────────────────────────
@@ -323,7 +319,10 @@ def _rollback_summary() -> dict | None:
 # ── Run upgrade ──────────────────────────────────────────────────────────────
 
 @router.post("/admin/upgrade/run")
-def upgrade_run(request: Request, payload: UpgradeTargetIn):
+def upgrade_run(request: Request, target: Optional[str] = None):
+    # A query param rather than a JSON body: a request with no body at all (e.g. any client
+    # still running a cached copy of this page from before per-version targeting existed) must
+    # keep working exactly as "upgrade to latest" always did, not 422 on a missing body.
     _require_admin(request)
     _require_git()
     log = []
@@ -339,11 +338,11 @@ def upgrade_run(request: Request, payload: UpgradeTargetIn):
         raise HTTPException(502, f"git fetch failed: {fetch['stderr'] or 'no network / no access to origin'}")
 
     target_ref = f"origin/{BRANCH}"
-    if payload.target:
+    if target:
         valid_hashes = {s["hash"] for s in _version_stops_between("HEAD", f"origin/{BRANCH}")}
-        if payload.target not in valid_hashes:
+        if target not in valid_hashes:
             raise HTTPException(400, "Not a valid upgrade target — refresh the page and try again.")
-        target_ref = payload.target
+        target_ref = target
 
     target_commit = _commit_info(target_ref)
     if target_commit and before and target_commit["hash"] == before["hash"]:
