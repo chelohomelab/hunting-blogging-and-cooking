@@ -4,6 +4,11 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.0 - 2026-09-24
+- The Upgrade page now shows every version between what you're running and the latest as its
+  own pickable stop, each with its own changelog and its own "Upgrade to X" button — no longer
+  forced to jump straight to the newest version if you'd rather go one at a time.
+
 ## 0.6.0 - 2026-09-24
 - Scheduled Hunts: plan a trip ahead of time (state, game type, dates, general location) from
   the Hunting Regulations page, while you've still got signal.

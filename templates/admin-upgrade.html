@@ -64,16 +64,10 @@
 
         <div id="status-line" class="text-sm text-gray-400 italic">Checking for updates…</div>
 
-        <!-- New version available -->
-        <div id="new-version-block" class="hidden space-y-2 pt-2 border-t border-gray-700">
-            <div class="flex items-center justify-between">
-                <span class="text-sm text-emerald-400 font-bold">New version: <span id="new-version-num"></span></span>
-                <button onclick="toggleDetails()" class="text-xs text-gray-400 hover:text-gray-200 transition cursor-pointer">Show details <span id="details-count"></span><span id="details-arrow">▾</span></button>
-            </div>
-            <div id="changes-details" class="hidden bg-gray-900 rounded-lg p-3 text-xs font-mono text-gray-400 space-y-1 max-h-48 overflow-y-auto"></div>
-            <button id="upgrade-btn" onclick="runUpgrade()" class="w-full px-4 py-2.5 bg-orange-700 hover:bg-orange-600 text-white text-sm font-bold rounded-lg transition cursor-pointer">
-                ⬆️ Upgrade to <span id="upgrade-btn-version"></span>
-            </button>
+        <!-- Available versions — each is its own valid upgrade stop, not just the branch tip,
+             so upgrading a version at a time (rather than always jumping to latest) is possible. -->
+        <div id="new-version-block" class="hidden space-y-3 pt-2 border-t border-gray-700">
+            <div id="version-stops-list" class="space-y-2"></div>
         </div>
 
         <div id="upgrade-progress" class="hidden text-xs text-yellow-400 font-mono animate-pulse">Working… this can take a minute, don't close this tab.</div>
@@ -122,14 +116,50 @@
         `).join('');
     }
 
-    let _latestVersionLabel = '';
     let _rollbackVersionLabel = '';
 
-    function toggleDetails() {
-        const box = document.getElementById('changes-details');
-        const arrow = document.getElementById('details-arrow');
+    function toggleStopDetails(i) {
+        const box = document.getElementById(`stop-details-${i}`);
+        const arrow = document.getElementById(`stop-arrow-${i}`);
         const show = box.classList.toggle('hidden') === false;
         arrow.textContent = show ? '▴' : '▾';
+    }
+
+    // Renders one card per version between here and the tip (oldest first), each with its own
+    // changelog and its own "Upgrade to X" button — picking any of them (not just the last/
+    // latest one) is a real, separately valid upgrade target. Falls back to a single combined
+    // card if no clean per-version commit boundary was found (shouldn't normally happen if
+    // VERSION is bumped on every merge, but this keeps the page working either way).
+    function renderVersionStops(stops, fallbackVersionLabel, fallbackItems) {
+        const list = document.getElementById('version-stops-list');
+        if (!stops || !stops.length) {
+            list.innerHTML = `
+                <div class="bg-gray-900 border border-emerald-700/50 rounded-lg p-3 space-y-2">
+                    <span class="text-sm font-bold text-emerald-400">${fallbackVersionLabel}</span>
+                    <div class="bg-gray-950 rounded p-2 text-xs font-mono text-gray-400 space-y-1 max-h-40 overflow-y-auto">
+                        ${fallbackItems.join('') || '<div class="text-gray-600 italic">No details available.</div>'}
+                    </div>
+                    <button onclick="runUpgrade(null, ${JSON.stringify(fallbackVersionLabel)})" class="w-full px-4 py-2.5 bg-orange-700 hover:bg-orange-600 text-white text-sm font-bold rounded-lg transition cursor-pointer">⬆️ Upgrade to ${fallbackVersionLabel}</button>
+                </div>`;
+            return;
+        }
+        list.innerHTML = stops.map((s, i) => {
+            const entries = s.changelog_entries || [];
+            const isLatest = i === stops.length - 1;
+            return `
+            <div class="bg-gray-900 border ${isLatest ? 'border-emerald-700/50' : 'border-gray-700'} rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-bold text-emerald-400">Version ${s.version}${isLatest ? ' (latest)' : ''}</span>
+                    <button onclick="toggleStopDetails(${i})" class="text-xs text-gray-400 hover:text-gray-200 transition cursor-pointer shrink-0">
+                        ${entries.length} change${entries.length === 1 ? '' : 's'} <span id="stop-arrow-${i}">▾</span>
+                    </button>
+                </div>
+                <div id="stop-details-${i}" class="hidden bg-gray-950 rounded p-2 text-xs text-gray-400 space-y-1 max-h-40 overflow-y-auto">
+                    ${entries.map(c => `<div>• ${c}</div>`).join('') || '<div class="text-gray-600 italic">No details available.</div>'}
+                </div>
+                <button onclick="runUpgrade(${JSON.stringify(s.hash)}, ${JSON.stringify(s.version)})" class="w-full px-4 py-2 bg-orange-700 hover:bg-orange-600 text-white text-sm font-bold rounded-lg transition cursor-pointer">⬆️ Upgrade to ${s.version}</button>
+            </div>`;
+        }).join('');
     }
 
     async function checkForUpdates() {
@@ -164,27 +194,22 @@
                 statusEl.className = 'text-sm text-green-400';
             } else {
                 statusEl.textContent = '';
-                _latestVersionLabel = d.latest_version || (d.latest ? d.latest.hash : 'latest');
                 // The VERSION file only changes when someone remembers to bump it — a real
                 // pending upgrade can still land between bumps, and showing "New version: 0.1.0"
                 // when you're already on 0.1.0 reads as a no-op even though it isn't. Fall back
                 // to the commit hash so there's always something visibly different to justify
                 // the button.
-                if (_latestVersionLabel === d.current_version && d.latest) {
-                    _latestVersionLabel = `${_latestVersionLabel} (${d.latest.hash})`;
+                let fallbackLabel = d.latest_version || (d.latest ? d.latest.hash : 'latest');
+                if (fallbackLabel === d.current_version && d.latest) {
+                    fallbackLabel = `${fallbackLabel} (${d.latest.hash})`;
                 }
-                document.getElementById('new-version-num').textContent = _latestVersionLabel;
-                document.getElementById('upgrade-btn-version').textContent = _latestVersionLabel;
-                const details = document.getElementById('changes-details');
                 // Prefer CHANGELOG.md's plain-English bullets over raw commit subjects — only
                 // falls back to commits when a VERSION bump landed without a changelog entry.
                 const changelogEntries = d.changelog_entries;
                 const usingChangelog = changelogEntries && changelogEntries.length > 0;
-                const items = usingChangelog ? changelogEntries : (d.commits_behind || []);
-                document.getElementById('details-count').textContent = items.length ? `(${items.length} change${items.length === 1 ? '' : 's'}) ` : '';
-                details.innerHTML = items.map(c => `<div>${usingChangelog ? '• ' : ''}${c}</div>`).join('') || '<div class="text-gray-600 italic">No details available.</div>';
-                details.classList.add('hidden');
-                document.getElementById('details-arrow').textContent = '▾';
+                const fallbackItems = (usingChangelog ? changelogEntries : (d.commits_behind || []))
+                    .map(c => `<div>${usingChangelog ? '• ' : ''}${c}</div>`);
+                renderVersionStops(d.version_stops, fallbackLabel, fallbackItems);
                 if (!d.dirty) newBlock.classList.remove('hidden');
             }
 
@@ -216,15 +241,18 @@
         return false;
     }
 
-    async function runUpgrade() {
-        if (!confirm(`Upgrade to ${_latestVersionLabel}? A backup is taken first, then the app restarts (typically back online within ~10 seconds).`)) return;
+    async function runUpgrade(targetHash, versionLabel) {
+        if (!confirm(`Upgrade to ${versionLabel}? A backup is taken first, then the app restarts (typically back online within ~10 seconds).`)) return;
 
-        document.getElementById('upgrade-btn').classList.add('hidden');
+        document.querySelectorAll('#version-stops-list button').forEach(b => b.disabled = true);
         document.getElementById('upgrade-progress').classList.remove('hidden');
         document.getElementById('upgrade-log').classList.add('hidden');
 
         try {
-            const res = await fetch('/admin/upgrade/run', { method: 'POST' });
+            const res = await fetch('/admin/upgrade/run', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: targetHash || null }),
+            });
             const d = await res.json();
             if (!res.ok) {
                 showToast(d.detail || 'Upgrade failed', 'error');
