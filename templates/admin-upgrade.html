@@ -249,10 +249,8 @@
         document.getElementById('upgrade-log').classList.add('hidden');
 
         try {
-            const res = await fetch('/admin/upgrade/run', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target: targetHash || null }),
-            });
+            const url = '/admin/upgrade/run' + (targetHash ? `?target=${encodeURIComponent(targetHash)}` : '');
+            const res = await fetch(url, { method: 'POST' });
             const d = await res.json();
             if (!res.ok) {
                 showToast(d.detail || 'Upgrade failed', 'error');
