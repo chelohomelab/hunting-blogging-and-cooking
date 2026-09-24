@@ -10,12 +10,22 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from typing import Optional
 
 from config import templates
 from paths import BASE_DIR, DATA_DIR
 from routers.backup import _load_config, restore_zip_bytes, save_backup_zip
 
 router = APIRouter()
+
+
+class UpgradeTargetIn(BaseModel):
+    # Commit hash to upgrade to — must be one of the stops _version_stops_between() returns
+    # between HEAD and origin/BRANCH, re-validated server-side rather than trusted as-is even
+    # though this endpoint is admin-only. None (the default — an empty {} body is valid) means
+    # "go all the way to the branch tip", the original one-button behavior.
+    target: Optional[str] = None
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # Docker images exclude .git (see .dockerignore) — this self-upgrade mechanism (git fetch/merge +
@@ -120,6 +130,30 @@ def _changelog_entries_since(current_version: str | None, rev: str) -> list[str]
             # instead of dropping it or treating it as a new, truncated entry.
             bullets[-1] += " " + stripped
     return bullets or None
+
+
+def _version_stops_between(base_rev: str, head_rev: str) -> list[dict]:
+    """Every commit in (base_rev, head_rev] that changed VERSION, oldest first — lets the
+    upgrade page offer each intermediate version as its own stop instead of only the branch
+    tip, since a merge to any of these is still a valid --ff-only fast-forward from base_rev.
+    Each entry's changelog is read at that exact commit, which naturally scopes it to "up to
+    and including this version" — later version sections don't exist yet at that point in
+    history."""
+    r = _git("log", "--reverse", "--format=%H", f"{base_rev}..{head_rev}", "--", "VERSION")
+    if not r["ok"] or not r["stdout"]:
+        return []
+    stops = []
+    current_version = _version_at(base_rev)
+    for commit_hash in r["stdout"].splitlines():
+        version = _version_at(commit_hash)
+        if not version:
+            continue
+        stops.append({
+            "hash": commit_hash,
+            "version": version,
+            "changelog_entries": _changelog_entries_since(current_version, commit_hash),
+        })
+    return stops
 
 
 def _repo_web_url() -> str | None:
@@ -254,6 +288,7 @@ def upgrade_check(request: Request):
     behind = _git("log", f"HEAD..origin/{BRANCH}", "--format=%h %s")
     commits_behind = behind["stdout"].splitlines() if behind["ok"] and behind["stdout"] else []
     changelog_entries = _changelog_entries_since(current_version, f"origin/{BRANCH}")
+    version_stops = _version_stops_between("HEAD", f"origin/{BRANCH}")
 
     return {
         "ok": True,
@@ -264,6 +299,7 @@ def upgrade_check(request: Request):
         "up_to_date": current is not None and latest is not None and current["hash"] == latest["hash"],
         "commits_behind": commits_behind,
         "changelog_entries": changelog_entries,
+        "version_stops": version_stops,
         "dirty": _is_dirty(),
         "dirty_files": _dirty_files(),
         "rollback": _rollback_summary(),
@@ -287,7 +323,7 @@ def _rollback_summary() -> dict | None:
 # ── Run upgrade ──────────────────────────────────────────────────────────────
 
 @router.post("/admin/upgrade/run")
-def upgrade_run(request: Request):
+def upgrade_run(request: Request, payload: UpgradeTargetIn):
     _require_admin(request)
     _require_git()
     log = []
@@ -302,8 +338,15 @@ def upgrade_run(request: Request):
     if not fetch["ok"]:
         raise HTTPException(502, f"git fetch failed: {fetch['stderr'] or 'no network / no access to origin'}")
 
-    latest = _commit_info(f"origin/{BRANCH}")
-    if latest and before and latest["hash"] == before["hash"]:
+    target_ref = f"origin/{BRANCH}"
+    if payload.target:
+        valid_hashes = {s["hash"] for s in _version_stops_between("HEAD", f"origin/{BRANCH}")}
+        if payload.target not in valid_hashes:
+            raise HTTPException(400, "Not a valid upgrade target — refresh the page and try again.")
+        target_ref = payload.target
+
+    target_commit = _commit_info(target_ref)
+    if target_commit and before and target_commit["hash"] == before["hash"]:
         return {"ok": True, "up_to_date": True, "log": log, "current": before}
 
     # Backup BEFORE touching any code, so a rollback always has something to restore to.
@@ -314,7 +357,7 @@ def upgrade_run(request: Request):
         raise HTTPException(500, f"Pre-upgrade backup failed, aborting upgrade: {e}")
     log.append({"cmd": "backup", "ok": True, "stdout": str(backup_path), "stderr": ""})
 
-    merge = _git("merge", "--ff-only", f"origin/{BRANCH}", timeout=30)
+    merge = _git("merge", "--ff-only", target_ref, timeout=30)
     log.append(merge)
     if not merge["ok"]:
         raise HTTPException(500, f"git merge --ff-only failed (backup was still taken at {backup_path}): {merge['stderr']}")
