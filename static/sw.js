@@ -12,11 +12,25 @@
 //                cache fallback, purged on every /login render.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v11';
+const SW_VERSION = 'v12';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
 const DATA_CACHE = `hbc-data-${SW_VERSION}`;
 const KNOWN_CACHES = [STATIC_CACHE, SHELL_CACHE, DATA_CACHE];
+
+// A plain `fetch()` doesn't fail fast when there's no connectivity — depending on the network
+// stack it can take anywhere from a few seconds to 20+ before actually giving up, and every
+// network-first handler below was waiting on that full hang before ever falling back to cache
+// (confirmed via a real offline DevTools trace: identical elapsed time between the failed
+// network attempt and the eventual cached response, up to 23s on one request). Racing every
+// fetch against this timeout means a dead connection falls back to cache in ~2.5s instead.
+const NETWORK_TIMEOUT_MS = 2500;
+
+function fetchWithTimeout(req, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(new Request(req, { signal: controller.signal })).finally(() => clearTimeout(timer));
+}
 
 const STATIC_URLS = [
   '/static/manifest.json',
@@ -123,7 +137,7 @@ async function handleStatic(req) {
   const cached = await caches.match(req);
   if (cached) return cached;
   try {
-    const resp = await fetch(req);
+    const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
     if (resp.ok) (await caches.open(STATIC_CACHE)).put(req, resp.clone());
     return resp;
   } catch (e) {
@@ -134,7 +148,7 @@ async function handleStatic(req) {
 
 async function handleShell(req, url) {
   try {
-    const resp = await fetch(req);
+    const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
     if (isSafeToCache(resp) && new URL(resp.url).pathname !== '/login') {
       (await caches.open(SHELL_CACHE)).put(req, resp.clone());
     }
@@ -148,7 +162,7 @@ async function handleShell(req, url) {
 
 async function handleData(req) {
   try {
-    const resp = await fetch(req);
+    const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
     if (isSafeToCache(resp)) (await caches.open(DATA_CACHE)).put(req, resp.clone());
     return resp;
   } catch (e) {
