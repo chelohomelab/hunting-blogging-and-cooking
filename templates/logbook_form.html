@@ -176,7 +176,15 @@
         </div>
 
         <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-4">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Weather (as observed — enter what you saw in the field)</h3>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">Weather</h3>
+            <div class="flex gap-2 items-center flex-wrap">
+                <select id="f-hunt-period" class="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500">
+                    <option value="morning">🌅 Morning Hunt</option>
+                    <option value="evening">🌆 Evening Hunt</option>
+                </select>
+                <button type="button" id="btn-weather" class="px-3 py-2 bg-blue-900/60 hover:bg-blue-800 border border-blue-700 text-blue-300 text-xs font-bold rounded-lg transition cursor-pointer">🌤️ Get Weather</button>
+                <span id="weather-status" class="text-xs text-gray-500">Needs a connection and your location above — or just enter it below.</span>
+            </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-xs text-gray-400 mb-1.5">Temp (°F)</label>
