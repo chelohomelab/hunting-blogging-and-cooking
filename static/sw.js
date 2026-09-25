@@ -14,7 +14,7 @@
 //              cache fallback, purged on every /login render. Also not version-suffixed.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v14';
+const SW_VERSION = 'v15';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 // Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Static JS/CSS
 // needs hard cache-busting on every release (cache-first would otherwise serve stale code
@@ -72,12 +72,26 @@ const CROSS_ORIGIN_URLS = [
   'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4',
 ];
 
-// Exact-match shell routes (server ignores no query string for these). /logbook/{id},
-// /logbook/{id}/edit, /logbook/trip/{id}, /logbook/trip/{id}/edit, /recipes/{id}, and
-// /recipes/{id}/edit are deliberately NOT included — viewing or editing a past entry/trip/
-// recipe needs a live fetch of it anyway (see logbook.js and recipes.js), so there's no offline
-// scenario this shell cache would actually serve for any.
+// Exact-match shell routes (server ignores no query string for these).
 const SHELL_EXACT = ['/', '/index.html', '/hunting', '/logbook', '/logbook/new', '/recipes', '/recipes/new'];
+
+// Per-id shell routes: /logbook/{id}, /logbook/{id}/edit, /logbook/trip/{id},
+// /logbook/trip/{id}/edit, /recipes/{id}, /recipes/{id}/edit. These used to be left uncached
+// entirely on the theory that viewing one always needs a live fetch anyway — but that meant
+// falling all the way through route() to a bare, un-timed, un-cached fetch() with zero offline
+// fallback (confirmed via a real HAR trace: these came back completely blank, not just slow).
+// That's exactly wrong for the trip-logging flow in particular, which is explicitly supposed to
+// keep working offline once a trip's been started (see CHANGELOG 0.6.0) — you start a trip with
+// signal, then need to reopen it with none to add a day. Cache-keying is per full URL (each id
+// gets its own entry), same as any other request, so this doesn't require anything special.
+const SHELL_PATTERNS = [
+  /^\/logbook\/\d+$/,
+  /^\/logbook\/\d+\/edit$/,
+  /^\/logbook\/trip\/\d+$/,
+  /^\/logbook\/trip\/\d+\/edit$/,
+  /^\/recipes\/\d+$/,
+  /^\/recipes\/\d+\/edit$/,
+];
 
 // The hunting reference data and the user's own logbook entries — small, always network-first
 // with cache fallback so a stale copy is only ever served when the network genuinely isn't
@@ -218,7 +232,7 @@ async function route(req, url) {
 
   if (isStaticAsset(url)) return handleStatic(req);
 
-  if (req.mode === 'navigate' && SHELL_EXACT.includes(url.pathname)) {
+  if (req.mode === 'navigate' && (SHELL_EXACT.includes(url.pathname) || SHELL_PATTERNS.some((re) => re.test(url.pathname)))) {
     return handleShell(req, url);
   }
 
