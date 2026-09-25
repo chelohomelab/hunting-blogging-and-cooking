@@ -113,6 +113,13 @@ function draftNarrative() {
 // ── Offline write-queue (localStorage — text-only entries, well within its size limits) ────
 
 const QUEUE_KEY = 'hbc_logbook_queue';
+// Set right before navigating to /logbook/new to resume editing a not-yet-synced entry (see
+// loadLogbookList's pending-item click handling below) — a localStorage handoff rather than a
+// URL query string, so the page actually navigated to is exactly '/logbook/new' with no query
+// string, matching what the service worker already has cached for offline use. A query string
+// would be a cache-key miss (see static/sw.js's per-URL cache matching) and fail to load at all
+// while offline — exactly the scenario this needs to work in.
+const RESUME_PENDING_KEY = 'hbc_logbook_resume_pending';
 
 function getQueue() {
     try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; }
@@ -123,16 +130,31 @@ function saveQueue(q) {
 function queueCount() { return getQueue().length; }
 
 // Tries the network first; if it's unreachable, queues the write instead of failing outright.
-// Returns { ok, queued, data }.
-async function submitEntry(payload, method, url) {
+// existingLocalId, when set, means this is an edit of an entry that's already sitting in the
+// queue from an earlier offline save — update it in place instead of pushing a second, duplicate
+// queue entry. Returns { ok, queued, data }.
+async function submitEntry(payload, method, url, existingLocalId = null) {
     try {
         const res = await fetch(url, {
             method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
-        if (res.ok) return { ok: true, queued: false, data: await res.json() };
+        if (res.ok) {
+            // Connectivity came back between opening this edit and saving it — the entry is
+            // about to be created for real, so drop the now-superseded queued copy.
+            if (existingLocalId) saveQueue(getQueue().filter(item => item.localId !== existingLocalId));
+            return { ok: true, queued: false, data: await res.json() };
+        }
         return { ok: false, queued: false, error: await res.text() };
     } catch {
         const q = getQueue();
+        if (existingLocalId) {
+            const idx = q.findIndex(item => item.localId === existingLocalId);
+            if (idx !== -1) {
+                q[idx] = { ...q[idx], payload };
+                saveQueue(q);
+                return { ok: true, queued: true };
+            }
+        }
         q.push({ localId: 'pending-' + Date.now() + '-' + Math.random().toString(36).slice(2), method, url, payload });
         saveQueue(q);
         return { ok: true, queued: true };
@@ -192,17 +214,21 @@ async function loadLogbookList() {
     document.getElementById('logbook-empty').classList.toggle('hidden', all.length > 0);
     if (!all.length) { list.innerHTML = ''; return; }
 
+    // Pending (not-yet-synced) entries have no real id yet, so they render as plain divs — not
+    // <a> links — and are made clickable via the delegated listener below instead, which routes
+    // through RESUME_PENDING_KEY so the edit form can be reopened with the queued data.
     list.innerHTML = all.map(e => {
         const isTrip = (e.day_count || 0) > 0;
         const tag = e._pending ? 'div' : 'a';
         const href = isTrip ? `/logbook/trip/${e.id}` : `/logbook/${e.id}`;
         const hrefAttr = e._pending ? '' : `href="${href}"`;
+        const resumeAttr = e._pending ? `data-resume-pending="${e._localId}"` : '';
         const titleLine = isTrip
             ? `${(e.scheduled_hunt && e.scheduled_hunt.label) || e.location_label || 'Trip'}`
             : `${fmtDate(e.hunt_date)}${e.location_label ? ' — ' + e.location_label : ''}`;
         const dayBadge = isTrip ? `<span class="text-[10px] font-bold bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded">🏕️ ${e.day_count} day${e.day_count === 1 ? '' : 's'}</span>` : '';
         return `
-        <${tag} ${hrefAttr} class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 transition ${e._pending ? '' : 'hover:border-orange-500/40 cursor-pointer'}">
+        <${tag} ${hrefAttr} ${resumeAttr} class="block bg-gray-800 rounded-lg border border-gray-700 shadow-xl p-4 space-y-1.5 transition hover:border-orange-500/40 cursor-pointer">
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-sm font-bold text-orange-400">${titleLine}</div>
                 <div class="flex items-center gap-2">
@@ -225,11 +251,32 @@ async function loadLogbookList() {
     }).join('');
 }
 
+document.addEventListener('click', e => {
+    const el = e.target.closest('[data-resume-pending]');
+    if (!el) return;
+    localStorage.setItem(RESUME_PENDING_KEY, el.dataset.resumePending);
+    window.location.href = '/logbook/new';
+});
+
 // ── Logbook entry form (new + edit) ─────────────────────────────────────────────────────────
 
 function initLogbookForm(entryId) {
     const form = document.getElementById('logbook-form');
     if (!form) return;
+
+    // Resuming a not-yet-synced entry for editing — see RESUME_PENDING_KEY's comment above and
+    // the click handler in loadLogbookList(). Only relevant on /logbook/new (entryId is null);
+    // /logbook/{id}/edit always means a real, already-synced entry.
+    let editingLocalId = null;
+    let editingQueueItem = null;
+    if (!entryId) {
+        const resumeId = localStorage.getItem(RESUME_PENDING_KEY);
+        if (resumeId) {
+            localStorage.removeItem(RESUME_PENDING_KEY);
+            editingQueueItem = getQueue().find(item => item.localId === resumeId) || null;
+            if (editingQueueItem) editingLocalId = resumeId;
+        }
+    }
 
     const dateInput = document.getElementById('f-date');
     const moonDisplay = document.getElementById('moon-phase-display');
@@ -317,10 +364,36 @@ function initLogbookForm(entryId) {
         textarea.focus();
     });
 
-    if (entryId) {
+    function populateFormFields(e) {
+        dateInput.value = e.hunt_date;
+        recomputeMoon();
+        document.getElementById('f-location-label').value = e.location_label || '';
+        if (e.latitude != null) document.getElementById('f-lat').value = e.latitude;
+        if (e.longitude != null) document.getElementById('f-lng').value = e.longitude;
+        if (e.latitude != null) document.getElementById('loc-status').textContent = `📍 ${e.latitude.toFixed(5)}, ${e.longitude.toFixed(5)}`;
+        document.getElementById('f-game-type').value = e.game_type || '';
+        document.getElementById('f-species').value = e.species || '';
+        document.getElementById('f-weapon').value = e.weapon || '';
+        document.getElementById('f-temp').value = e.weather_temp_f ?? '';
+        document.getElementById('f-conditions').value = e.weather_conditions || '';
+        document.getElementById('f-wind-dir').value = e.wind_direction || '';
+        document.getElementById('f-wind-speed').value = e.wind_speed_mph ?? '';
+        document.getElementById('f-harvested').checked = !!e.harvested;
+        document.getElementById('harvest-notes-wrap').classList.toggle('hidden', !e.harvested);
+        document.getElementById('f-harvest-notes').value = e.harvest_notes || '';
+        document.getElementById('f-narrative').value = e.narrative || '';
+    }
+
+    if (entryId || editingLocalId) {
         document.getElementById('btn-delete').classList.remove('hidden');
         document.getElementById('btn-delete').addEventListener('click', async () => {
             if (!confirm('Delete this logbook entry? This cannot be undone.')) return;
+            if (editingLocalId) {
+                // Only ever sat in the local queue — nothing to delete server-side.
+                saveQueue(getQueue().filter(item => item.localId !== editingLocalId));
+                window.location.href = '/logbook';
+                return;
+            }
             try {
                 await fetch(`/api/logbook/${entryId}`, { method: 'DELETE' });
                 window.location.href = '/logbook';
@@ -328,34 +401,24 @@ function initLogbookForm(entryId) {
                 document.getElementById('form-status').textContent = 'Could not delete — you appear to be offline.';
             }
         });
+    }
+
+    if (entryId) {
         (async () => {
             try {
                 const res = await fetch(`/api/logbook/${entryId}`);
                 if (!res.ok) throw new Error();
                 const e = await res.json();
-                dateInput.value = e.hunt_date;
-                recomputeMoon();
-                document.getElementById('f-location-label').value = e.location_label || '';
-                if (e.latitude != null) document.getElementById('f-lat').value = e.latitude;
-                if (e.longitude != null) document.getElementById('f-lng').value = e.longitude;
-                if (e.latitude != null) document.getElementById('loc-status').textContent = `📍 ${e.latitude.toFixed(5)}, ${e.longitude.toFixed(5)}`;
-                document.getElementById('f-game-type').value = e.game_type || '';
-                document.getElementById('f-species').value = e.species || '';
-                document.getElementById('f-weapon').value = e.weapon || '';
-                document.getElementById('f-temp').value = e.weather_temp_f ?? '';
-                document.getElementById('f-conditions').value = e.weather_conditions || '';
-                document.getElementById('f-wind-dir').value = e.wind_direction || '';
-                document.getElementById('f-wind-speed').value = e.wind_speed_mph ?? '';
-                document.getElementById('f-harvested').checked = !!e.harvested;
-                document.getElementById('harvest-notes-wrap').classList.toggle('hidden', !e.harvested);
-                document.getElementById('f-harvest-notes').value = e.harvest_notes || '';
-                document.getElementById('f-narrative').value = e.narrative || '';
+                populateFormFields(e);
                 renderMediaGrid(e.media);
             } catch {
                 document.getElementById('form-status').textContent = "Couldn't load this entry — you appear to be offline. Editing existing entries needs a connection.";
                 form.querySelectorAll('input, select, textarea, button').forEach(el => el.disabled = true);
             }
         })();
+    } else if (editingQueueItem) {
+        populateFormFields(editingQueueItem.payload);
+        document.getElementById('form-status').textContent = '⏳ Editing an entry that hasn\'t synced yet — changes are saved back to this device until you\'re back in range.';
     }
 
     form.addEventListener('submit', async e => {
@@ -381,7 +444,7 @@ function initLogbookForm(entryId) {
         status.textContent = 'Saving…';
         const method = entryId ? 'PUT' : 'POST';
         const url = entryId ? `/api/logbook/${entryId}` : '/api/logbook';
-        const result = await submitEntry(payload, method, url);
+        const result = await submitEntry(payload, method, url, editingLocalId);
         if (result.queued) {
             status.textContent = "📥 Saved offline — no signal right now, this'll sync automatically once you're back in range.";
             setTimeout(() => { window.location.href = '/logbook'; }, 1500);

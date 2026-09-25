@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.10 - 2026-09-25
+- Fixed logbook entries saved while offline (no signal) being impossible to open, view, or edit
+  until they synced — they now open the same way a synced entry does, showing exactly what you
+  saved, and any changes you make are kept on the device and synced automatically once you're
+  back in range.
+
 ## 0.7.9 - 2026-09-25
 - Fixed the Upgrade page still offering to "upgrade" to the version you're already on, in a
   different way than before — merging a pull request always leaves one extra, harmless commit
