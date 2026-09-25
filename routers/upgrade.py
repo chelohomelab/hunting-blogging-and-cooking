@@ -65,13 +65,19 @@ def _git(*args, timeout: int = 60) -> dict:
 
 
 def _commit_info(rev: str) -> dict | None:
-    r = _git("log", "-1", "--format=%h|%cI|%s", rev)
+    # %h (abbreviated hash) is only for display — git recalculates its minimum unambiguous
+    # length dynamically as the repo grows, so the SAME commit can print at different lengths
+    # between two separate `git log` calls (e.g. one before a `git fetch`, one after), which
+    # makes it unsafe to use for equality checks. full_hash (%H) is always 40 stable hex chars
+    # and is what every identity comparison below should use instead.
+    r = _git("log", "-1", "--format=%H|%h|%cI|%s", rev)
     if not r["ok"] or not r["stdout"]:
         return None
-    short_hash, iso_date, subject = r["stdout"].split("|", 2)
+    full_hash, short_hash, iso_date, subject = r["stdout"].split("|", 3)
     tag = _git("describe", "--tags", "--exact-match", rev)
     return {
         "hash": short_hash,
+        "full_hash": full_hash,
         "date": iso_date,
         "subject": subject,
         "tag": tag["stdout"] if tag["ok"] else None,
@@ -292,7 +298,7 @@ def upgrade_check(request: Request):
         "current_version": current_version,
         "latest": latest,
         "latest_version": latest_version,
-        "up_to_date": current is not None and latest is not None and current["hash"] == latest["hash"],
+        "up_to_date": current is not None and latest is not None and current["full_hash"] == latest["full_hash"],
         "commits_behind": commits_behind,
         "changelog_entries": changelog_entries,
         "version_stops": version_stops,
@@ -345,7 +351,7 @@ def upgrade_run(request: Request, target: Optional[str] = None):
         target_ref = target
 
     target_commit = _commit_info(target_ref)
-    if target_commit and before and target_commit["hash"] == before["hash"]:
+    if target_commit and before and target_commit["full_hash"] == before["full_hash"]:
         return {"ok": True, "up_to_date": True, "log": log, "current": before}
 
     # Backup BEFORE touching any code, so a rollback always has something to restore to.
@@ -368,8 +374,11 @@ def upgrade_run(request: Request, target: Optional[str] = None):
 
     after = _commit_info("HEAD")
     _save_upgrade_state({
-        "previous_commit": before["hash"] if before else None,
-        "new_commit": after["hash"] if after else None,
+        # Full hash, not the abbreviated one — this gets persisted to disk and read back for a
+        # rollback that could happen long after more commits have landed, so it needs to stay
+        # unambiguously resolvable indefinitely, not just within this one request.
+        "previous_commit": before["full_hash"] if before else None,
+        "new_commit": after["full_hash"] if after else None,
         "backup_file": str(backup_path),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     })

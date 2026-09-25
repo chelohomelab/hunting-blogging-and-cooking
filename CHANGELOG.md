@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.8 - 2026-09-24
+- Fixed the Upgrade page sometimes claiming a new version was available when you were already
+  on it (offering to "upgrade" to the exact version/commit already running) — it was comparing
+  shortened commit hashes, which git can print at different lengths for the same commit depending
+  on when they're asked for, instead of the full, always-stable hash.
+
 ## 0.7.7 - 2026-09-24
 - Fixed several pages failing to load at all offline after visiting them earlier while
   connected — logging/viewing a trip, viewing or editing a logbook entry, and viewing or editing
