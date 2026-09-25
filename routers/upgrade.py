@@ -138,19 +138,42 @@ def _version_stops_between(base_rev: str, head_rev: str) -> list[dict]:
     and including this version" — later version sections don't exist yet at that point in
     history."""
     r = _git("log", "--reverse", "--format=%H", f"{base_rev}..{head_rev}", "--", "VERSION")
-    if not r["ok"] or not r["stdout"]:
-        return []
     stops = []
     current_version = _version_at(base_rev)
-    for commit_hash in r["stdout"].splitlines():
-        version = _version_at(commit_hash)
-        if not version:
-            continue
-        stops.append({
-            "hash": commit_hash,
-            "version": version,
-            "changelog_entries": _changelog_entries_since(current_version, commit_hash),
-        })
+    if r["ok"] and r["stdout"]:
+        for commit_hash in r["stdout"].splitlines():
+            version = _version_at(commit_hash)
+            if not version:
+                continue
+            stops.append({
+                "hash": commit_hash,
+                "version": version,
+                "changelog_entries": _changelog_entries_since(current_version, commit_hash),
+            })
+
+    # `git log -- VERSION` only shows commits that actually change that file's content, and
+    # merge commits get history-simplified away entirely when their tree already matches a
+    # parent for that path — which is exactly what a plain `gh pr merge` produces (feature
+    # branch tip has the real VERSION bump; the merge commit on top of it doesn't touch VERSION
+    # again). That left a real, pending commit (head_rev itself) completely unaccounted for by
+    # any stop, so it could never be reached via the picker — the fallback card would offer to
+    # "upgrade" to a version string identical to current, which is genuinely confusing. Anchor
+    # the last stop (or add one, if none exist) to the *actual* tip so picking any stop always
+    # leaves you exactly caught up, not one silent commit short.
+    head_hash = _git("rev-parse", head_rev)
+    head_full = head_hash["stdout"].strip() if head_hash["ok"] else None
+    if head_full and (not stops or stops[-1]["hash"] != head_full):
+        base_hash = _git("rev-parse", base_rev)
+        base_full = base_hash["stdout"].strip() if base_hash["ok"] else None
+        if head_full != base_full:
+            if stops:
+                stops[-1]["hash"] = head_full
+            else:
+                stops.append({
+                    "hash": head_full,
+                    "version": _version_at(head_rev) or current_version,
+                    "changelog_entries": _changelog_entries_since(current_version, head_rev),
+                })
     return stops
 
 
