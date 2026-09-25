@@ -4,18 +4,29 @@
 // future phase (see docs/VISION.md) that needs its own IndexedDB write-queue, not handled here.
 //
 // Three independent caches, each with its own eviction policy:
-//   hbc-static — CDN libs (Tailwind), site images, manifest.json — cache-first, never purged on
-//                login/logout since nothing here is user-specific.
-//   hbc-shell  — the page shells reachable via normal browsing — network-first w/ cache
-//                fallback, purged on every /login render.
-//   hbc-data   — JSON from the hunting states/seasons/regulations endpoints — network-first w/
-//                cache fallback, purged on every /login render.
+//   hbc-static-{VERSION} — CDN libs (Tailwind), site images, JS — cache-first, name changes on
+//                every SW_VERSION bump so stale code/assets can never linger past an update;
+//                never purged on login/logout since nothing here is user-specific.
+//   hbc-shell — the page shells reachable via normal browsing — network-first w/ cache fallback,
+//               purged on every /login render. Deliberately NOT version-suffixed — see the note
+//               by SW_VERSION below for why.
+//   hbc-data — JSON from the hunting states/seasons/regulations endpoints — network-first w/
+//              cache fallback, purged on every /login render. Also not version-suffixed.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v12';
+const SW_VERSION = 'v13';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
-const SHELL_CACHE = `hbc-shell-${SW_VERSION}`;
-const DATA_CACHE = `hbc-data-${SW_VERSION}`;
+// Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Static JS/CSS
+// needs hard cache-busting on every release (cache-first would otherwise serve stale code
+// forever), but shell/data are network-first-with-cache-fallback — fresh content is always
+// preferred when online, and the cached copy is only ever seen at all once genuinely offline.
+// Tying their name to SW_VERSION meant every version bump wiped them via the activate cleanup
+// below; a device that went offline before its next online page visit repopulated them lost
+// offline loading completely instead of just serving a page from a version or two back — a real
+// incident (see the 2026-09-24 discussion): two SW_VERSION bumps in quick succession, then
+// offline before a fresh online reload, and the app failed to load at all.
+const SHELL_CACHE = 'hbc-shell';
+const DATA_CACHE = 'hbc-data';
 const KNOWN_CACHES = [STATIC_CACHE, SHELL_CACHE, DATA_CACHE];
 
 // A plain `fetch()` doesn't fail fast when there's no connectivity — depending on the network
