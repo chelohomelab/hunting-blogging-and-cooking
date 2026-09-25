@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.4 - 2026-09-24
+- Fixed the Upgrade/Rollback buttons still doing nothing on some phones after the last two
+  fixes — the browser's native confirmation popup wasn't appearing at all inside the installed
+  app, so the confirmation step silently failed before anything could run. Replaced it with the
+  app's own confirmation popup, which doesn't depend on that browser feature.
+
 ## 0.7.3 - 2026-09-24
 - Fixed the app failing to load at all while offline right after an update — the page-shell and
   data caches were being wiped on every version bump instead of only when they actually needed
