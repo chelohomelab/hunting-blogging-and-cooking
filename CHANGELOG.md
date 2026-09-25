@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.8.0 - 2026-09-25
+- Logbook: added a "Get Weather" button next to a Morning/Evening Hunt dropdown — fills in
+  temperature, conditions, and wind from your already-captured location and the hunt date,
+  instead of typing it in by hand. Needs a connection (unlike location, which works with zero
+  signal); manual entry still works exactly as before if you're offline or want to adjust it.
+
 ## 0.7.11 - 2026-09-25
 - Added Hunting/Logbook/Recipes quick-links to every admin page (Upgrade, Backup, Users, Add
   Hunting Data, Phone/Tablet Setup) — previously the only way out of an admin page was back to

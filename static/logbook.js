@@ -258,6 +258,62 @@ document.addEventListener('click', e => {
     window.location.href = '/logbook/new';
 });
 
+// ── Weather auto-fill — same idea as "Use My Location": one tap fills in fields you'd
+// otherwise type by hand, using coordinates already captured for the entry. Unlike location,
+// this genuinely needs a live connection (there's no on-device weather sensor), so it's an
+// optional convenience on top of manual entry, not a replacement for it. Open-Meteo (no API key,
+// CORS-enabled for direct browser use) — the forecast endpoint covers the recent past (up to 92
+// days) and near-future; anything older goes to the historical archive endpoint instead, since
+// the forecast endpoint doesn't retain data that far back.
+const WEATHER_CODE_TO_CONDITION = {
+    0: 'Clear', 1: 'Partly Cloudy', 2: 'Partly Cloudy', 3: 'Cloudy',
+    45: 'Fog', 48: 'Fog',
+    51: 'Rain', 53: 'Rain', 55: 'Rain', 56: 'Rain', 57: 'Rain',
+    61: 'Rain', 63: 'Rain', 65: 'Rain', 66: 'Rain', 67: 'Rain',
+    71: 'Snow', 73: 'Snow', 75: 'Snow', 77: 'Snow',
+    80: 'Rain', 81: 'Rain', 82: 'Rain',
+    85: 'Snow', 86: 'Snow',
+    95: 'Rain', 96: 'Rain', 99: 'Rain',
+};
+
+function degToCompass(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(deg / 45) % 8];
+}
+
+// Picks the forecast endpoint for dates within the last 90 days (or in the future — it also
+// serves a 16-day forecast), and the historical archive endpoint for anything older.
+function weatherApiBase(dateStr) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const target = new Date(y, m - 1, d);
+    const daysAgo = Math.round((today - target) / 86400000);
+    return daysAgo <= 90
+        ? 'https://api.open-meteo.com/v1/forecast'
+        : 'https://archive-api.open-meteo.com/v1/archive';
+}
+
+// Throws on any failure (offline, bad response, date outside the archive's coverage) — caller
+// shows a status message either way, matching the pattern used elsewhere in this file rather
+// than swallowing errors here.
+async function fillWeatherFromApi(lat, lng, dateStr, period) {
+    const hour = period === 'evening' ? '17:00' : '07:00';
+    const base = weatherApiBase(dateStr);
+    const url = `${base}?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}` +
+        `&hourly=temperature_2m,weathercode,windspeed_10m,winddirection_10m` +
+        `&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('weather request failed');
+    const data = await res.json();
+    const idx = (data.hourly && data.hourly.time || []).indexOf(`${dateStr}T${hour}`);
+    if (idx === -1) throw new Error('no hourly data for that date/hour');
+    document.getElementById('f-temp').value = Math.round(data.hourly.temperature_2m[idx]);
+    document.getElementById('f-conditions').value = WEATHER_CODE_TO_CONDITION[data.hourly.weathercode[idx]] || '';
+    document.getElementById('f-wind-dir').value = degToCompass(data.hourly.winddirection_10m[idx]);
+    document.getElementById('f-wind-speed').value = Math.round(data.hourly.windspeed_10m[idx]);
+}
+
 // ── Logbook entry form (new + edit) ─────────────────────────────────────────────────────────
 
 function initLogbookForm(entryId) {
@@ -308,6 +364,30 @@ function initLogbookForm(entryId) {
             { enableHighAccuracy: true, timeout: 15000 }
         );
     });
+
+    const huntPeriodSelect = document.getElementById('f-hunt-period');
+    if (huntPeriodSelect && !huntPeriodSelect.value) {
+        huntPeriodSelect.value = new Date().getHours() < 12 ? 'morning' : 'evening';
+    }
+    const btnWeather = document.getElementById('btn-weather');
+    if (btnWeather) {
+        btnWeather.addEventListener('click', async () => {
+            const status = document.getElementById('weather-status');
+            const lat = document.getElementById('f-lat').value;
+            const lng = document.getElementById('f-lng').value;
+            const date = dateInput.value;
+            if (!lat || !lng) { status.textContent = "No location captured yet — tap 'Use My Location' above first."; return; }
+            if (!date) { status.textContent = 'Pick a date first.'; return; }
+            const period = huntPeriodSelect.value;
+            status.textContent = 'Getting weather…';
+            try {
+                await fillWeatherFromApi(lat, lng, date, period);
+                status.textContent = `✓ ${period === 'evening' ? 'Evening' : 'Morning'} weather filled in — double-check it against what you actually saw.`;
+            } catch {
+                status.textContent = "Couldn't get weather — you appear to be offline, or that date isn't available.";
+            }
+        });
+    }
 
     // ── Media (photos/video) — online-only, see the HuntLogMedia comment in database.py ────
     const mediaGrid = document.getElementById('media-grid');
