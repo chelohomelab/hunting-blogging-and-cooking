@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.6 - 2026-09-24
+- Found and fixed the actual reason the Upgrade button did nothing, on phone AND on a regular
+  computer browser — the button's own markup was malformed since the version-picker feature
+  first shipped (0.7.0), which silently broke the button before any of the previous fixes could
+  even come into play. Rebuilt how the button is wired up so this can't happen again.
+
 ## 0.7.5 - 2026-09-24
 - Fixed offline browsing still feeling painfully slow after the last timeout fix — every single
   page/data request was still waiting out the full ~2.5s network timeout before showing cached
