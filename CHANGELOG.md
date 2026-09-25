@@ -4,6 +4,13 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.9 - 2026-09-25
+- Fixed the Upgrade page still offering to "upgrade" to the version you're already on, in a
+  different way than before — merging a pull request always leaves one extra, harmless commit
+  on top of the real change, and that trailing commit wasn't being offered as an actual upgrade
+  target, only showing up as a confusing "new version" that looked identical to your current one.
+  Every upgrade now always lands you fully caught up, with no leftover commit behind the scenes.
+
 ## 0.7.8 - 2026-09-24
 - Fixed the Upgrade page sometimes claiming a new version was available when you were already
   on it (offering to "upgrade" to the exact version/commit already running) — it was comparing
