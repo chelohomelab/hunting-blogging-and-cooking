@@ -35,6 +35,18 @@ function closeMobileNav() {
     document.getElementById('mobile-nav-overlay').classList.add('hidden');
 }
 
+// See the matching comment in logbook.js — the service worker serves hbc-data entries
+// stale-while-revalidate (instant from cache, refreshed in the background), so a write needs to
+// delete its own affected cache entries or the very next load would still show the pre-write
+// data until that background refresh catches up. Duplicated here rather than shared since this
+// page deliberately doesn't load a shared app.js.
+async function invalidateCache(urls) {
+    try {
+        const cache = await caches.open('hbc-data');
+        await Promise.all(urls.map(u => cache.delete(u)));
+    } catch { /* Cache Storage unavailable — the next background refresh will still catch up. */ }
+}
+
 // ── Recipes list page ───────────────────────────────────────────────────────────────────────
 
 let _allRecipes = [];
@@ -111,6 +123,7 @@ async function initRecipeForm(recipeId) {
             if (!confirm('Delete this recipe? This cannot be undone.')) return;
             try {
                 await fetch(`/api/recipes/${recipeId}`, { method: 'DELETE' });
+                await invalidateCache(['/api/recipes', `/api/recipes/${recipeId}`]);
                 window.location.href = '/recipes';
             } catch {
                 document.getElementById('form-status').textContent = 'Could not delete — you appear to be offline.';
@@ -155,6 +168,7 @@ async function initRecipeForm(recipeId) {
                 status.textContent = 'Failed to save: ' + (err.detail || 'unknown error');
                 return;
             }
+            await invalidateCache(recipeId ? ['/api/recipes', `/api/recipes/${recipeId}`] : ['/api/recipes']);
             window.location.href = '/recipes';
         } catch {
             status.textContent = "Couldn't save — you appear to be offline. Try again once you're back in range.";

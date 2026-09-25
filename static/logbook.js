@@ -129,11 +129,26 @@ function saveQueue(q) {
 }
 function queueCount() { return getQueue().length; }
 
+// The service worker (static/sw.js) serves hbc-data entries stale-while-revalidate: a cached GET
+// is returned instantly, with a background fetch refreshing the cache for next time. That's fast,
+// but without this, your OWN just-made write wouldn't show up until that next background refresh
+// — deleting the relevant cache entries here means the very next load has nothing cached for
+// them, so it falls through to a real, immediate network fetch instead. Cache name is
+// hardcoded to match DATA_CACHE in sw.js (no clean way to share a constant across those two
+// worlds) — keep them in sync if that ever changes.
+async function invalidateCache(urls) {
+    try {
+        const cache = await caches.open('hbc-data');
+        await Promise.all(urls.map(u => cache.delete(u)));
+    } catch { /* Cache Storage unavailable — the next background refresh will still catch up. */ }
+}
+
 // Tries the network first; if it's unreachable, queues the write instead of failing outright.
 // existingLocalId, when set, means this is an edit of an entry that's already sitting in the
 // queue from an earlier offline save — update it in place instead of pushing a second, duplicate
-// queue entry. Returns { ok, queued, data }.
-async function submitEntry(payload, method, url, existingLocalId = null) {
+// queue entry. invalidateUrls lists the GET endpoints this write affects (defaults to just
+// `url`) — see invalidateCache() above. Returns { ok, queued, data }.
+async function submitEntry(payload, method, url, existingLocalId = null, invalidateUrls = null) {
     try {
         const res = await fetch(url, {
             method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -142,6 +157,7 @@ async function submitEntry(payload, method, url, existingLocalId = null) {
             // Connectivity came back between opening this edit and saving it — the entry is
             // about to be created for real, so drop the now-superseded queued copy.
             if (existingLocalId) saveQueue(getQueue().filter(item => item.localId !== existingLocalId));
+            await invalidateCache(invalidateUrls || [url]);
             return { ok: true, queued: false, data: await res.json() };
         }
         return { ok: false, queued: false, error: await res.text() };
@@ -409,6 +425,7 @@ function initLogbookForm(entryId) {
             if (!confirm('Remove this photo/video?')) return;
             try {
                 await fetch(`/api/logbook/${entryId}/media/${btn.dataset.deleteMedia}`, { method: 'DELETE' });
+                await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
                 btn.closest('[data-media-id]')?.remove();
             } catch {
                 alert("Couldn't delete — you appear to be offline.");
@@ -426,6 +443,7 @@ function initLogbookForm(entryId) {
                 try {
                     const res = await fetch(`/api/logbook/${entryId}/media`, { method: 'POST', body: fd });
                     if (res.ok) {
+                        await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
                         mediaGrid.insertAdjacentHTML('beforeend', mediaItemHtml(await res.json()));
                     } else {
                         const err = await res.json().catch(() => ({}));
@@ -476,6 +494,7 @@ function initLogbookForm(entryId) {
             }
             try {
                 await fetch(`/api/logbook/${entryId}`, { method: 'DELETE' });
+                await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
                 window.location.href = '/logbook';
             } catch {
                 document.getElementById('form-status').textContent = 'Could not delete — you appear to be offline.';
@@ -524,7 +543,8 @@ function initLogbookForm(entryId) {
         status.textContent = 'Saving…';
         const method = entryId ? 'PUT' : 'POST';
         const url = entryId ? `/api/logbook/${entryId}` : '/api/logbook';
-        const result = await submitEntry(payload, method, url, editingLocalId);
+        const invalidateUrls = entryId ? ['/api/logbook', url] : ['/api/logbook'];
+        const result = await submitEntry(payload, method, url, editingLocalId, invalidateUrls);
         if (result.queued) {
             status.textContent = "📥 Saved offline — no signal right now, this'll sync automatically once you're back in range.";
             setTimeout(() => { window.location.href = '/logbook'; }, 1500);
@@ -661,6 +681,7 @@ async function initTripForm(entryId) {
         if (!confirm('Remove this photo/video?')) return;
         try {
             await fetch(`/api/logbook/${entryId}/days/${dayId}/media/${btn.dataset.deleteDayMedia}`, { method: 'DELETE' });
+            await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
             btn.closest('[data-media-id]')?.remove();
             const d = _tripDays.find(x => x.id === Number(dayId));
             if (d) d.media = (d.media || []).filter(m => m.id !== Number(btn.dataset.deleteDayMedia));
@@ -681,6 +702,7 @@ async function initTripForm(entryId) {
             try {
                 const res = await fetch(`/api/logbook/${entryId}/days/${dayId}/media`, { method: 'POST', body: fd });
                 if (res.ok) {
+                    await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
                     const m = await res.json();
                     grid.insertAdjacentHTML('beforeend', mediaItemHtmlForDay(m));
                     const d = _tripDays.find(x => x.id === Number(dayId));
@@ -700,6 +722,7 @@ async function initTripForm(entryId) {
         if (!dayId || !confirm('Delete this day? This cannot be undone.')) return;
         try {
             await fetch(`/api/logbook/${entryId}/days/${dayId}`, { method: 'DELETE' });
+            await invalidateCache(['/api/logbook', `/api/logbook/${entryId}`]);
         } catch {
             alert("Couldn't delete — you appear to be offline.");
             return;
@@ -869,7 +892,7 @@ async function saveDay() {
     status.textContent = 'Saving…';
     const method = dayId ? 'PUT' : 'POST';
     const url = dayId ? `/api/logbook/${_tripEntryId}/days/${dayId}` : `/api/logbook/${_tripEntryId}/days`;
-    const result = await submitEntry(payload, method, url);
+    const result = await submitEntry(payload, method, url, null, ['/api/logbook', `/api/logbook/${_tripEntryId}`]);
     if (result.queued) {
         status.textContent = "📥 Saved offline — this'll sync automatically once you're back in range.";
         setTimeout(() => { hideDayForm(); renderTripDaysList(); }, 1200);
@@ -901,6 +924,7 @@ async function saveTripFields(statusElId) {
                 narrative: document.getElementById('trip-narrative').value || null,
             }),
         });
+        if (res.ok) await invalidateCache(['/api/logbook', `/api/logbook/${_tripEntryId}`]);
         status.textContent = res.ok ? 'Saved.' : 'Failed to save.';
         setTimeout(() => { status.textContent = ''; }, 2000);
     } catch {
@@ -914,6 +938,7 @@ async function deleteTrip() {
     if (!confirm('Delete this entire trip log, including all days and photos? This cannot be undone.')) return;
     try {
         await fetch(`/api/logbook/${_tripEntryId}`, { method: 'DELETE' });
+        await invalidateCache(['/api/logbook', `/api/logbook/${_tripEntryId}`]);
         window.location.href = '/logbook';
     } catch {
         alert("Couldn't delete — you appear to be offline.");

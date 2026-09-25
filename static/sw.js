@@ -7,44 +7,48 @@
 //   hbc-static-{VERSION} — CDN libs (Tailwind), site images, JS — cache-first, name changes on
 //                every SW_VERSION bump so stale code/assets can never linger past an update;
 //                never purged on login/logout since nothing here is user-specific.
-//   hbc-shell — the page shells reachable via normal browsing — network-first w/ cache fallback,
-//               purged on every /login render. Deliberately NOT version-suffixed — see the note
-//               by SW_VERSION below for why.
-//   hbc-data — JSON from the hunting states/seasons/regulations endpoints — network-first w/
-//              cache fallback, purged on every /login render. Also not version-suffixed.
+//   hbc-shell — the page shells reachable via normal browsing — stale-while-revalidate (see
+//               below), purged on every /login render. Deliberately NOT version-suffixed — see
+//               the note by SW_VERSION below for why.
+//   hbc-data — JSON from the hunting states/seasons/regulations/logbook/recipes endpoints —
+//              stale-while-revalidate, purged on every /login render. Also not version-suffixed.
+//
+// hbc-shell and hbc-data both use stale-while-revalidate: a cached copy, if one exists, is
+// returned IMMEDIATELY with no network wait at all, while a background fetch silently refreshes
+// the cache for next time. This replaced an earlier network-first-with-timeout design (racing
+// every request against a bound, with a navigator.onLine check to skip the race when already
+// known offline) — that still made every single navigation pay up to that bound before showing
+// anything, and a real session fires many of these per screen (the page shell, then list data,
+// then per-item data on the next tap), so the wait kept compounding into feeling just as slow as
+// before even once each individual request was fast (2026-09-24/25 discussion, HAR traces).
+// Stale-while-revalidate removes the wait entirely for anything already cached. The tradeoff:
+// a screen can show data that's a write or two behind what's actually on the server until the
+// background refresh lands — logbook.js explicitly deletes the relevant hbc-data entries right
+// after your own successful writes (see invalidateCache() there) specifically so your own
+// changes never look stale to you; a change made from a different device would still take one
+// extra background-refresh cycle to show up here.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes, AND
 // whenever the content of any STATIC_URLS entry changes (hunting.js, logbook.js, recipes.js,
 // manifest.json, images, ...). STATIC_CACHE is cache-first and never revalidates an asset it
 // already has, so an already-installed service worker keeps serving the old cached copy of e.g.
 // logbook.js forever after a deploy unless the cache name itself changes.
-const SW_VERSION = 'v17';
+const SW_VERSION = 'v18';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
-// Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Static JS/CSS
-// needs hard cache-busting on every release (cache-first would otherwise serve stale code
-// forever), but shell/data are network-first-with-cache-fallback — fresh content is always
-// preferred when online, and the cached copy is only ever seen at all once genuinely offline.
-// Tying their name to SW_VERSION meant every version bump wiped them via the activate cleanup
-// below; a device that went offline before its next online page visit repopulated them lost
-// offline loading completely instead of just serving a page from a version or two back — a real
-// incident (see the 2026-09-24 discussion): two SW_VERSION bumps in quick succession, then
-// offline before a fresh online reload, and the app failed to load at all.
+// Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Tying their name to
+// SW_VERSION meant every version bump wiped them via the activate cleanup below; a device that
+// went offline before its next online page visit repopulated them lost offline loading
+// completely instead of just serving a page from a version or two back — a real incident (see
+// the 2026-09-24 discussion): two SW_VERSION bumps in quick succession, then offline before a
+// fresh online reload, and the app failed to load at all.
 const SHELL_CACHE = 'hbc-shell';
 const DATA_CACHE = 'hbc-data';
 const KNOWN_CACHES = [STATIC_CACHE, SHELL_CACHE, DATA_CACHE];
 
-// A plain `fetch()` doesn't fail fast when there's no connectivity — depending on the network
-// stack it can take anywhere from a few seconds to 20+ before actually giving up, and every
-// network-first handler below was waiting on that full hang before ever falling back to cache
-// (confirmed via a real offline DevTools trace: identical elapsed time between the failed
-// network attempt and the eventual cached response, up to 23s on one request). Racing every
-// fetch against this timeout means a dead connection falls back to cache in ~2.5s instead.
-// This is still only a bound for the "connected but stalled" case (weak signal, captive portal) —
-// when the OS already knows there's no connection at all (navigator.onLine === false), handleShell
-// and handleData skip the race entirely and read cache straight away, since a real browsing
-// session fires many of these per screen and paying 2.5s on each one added right back up to
-// feeling just as slow as before (see the 2026-09-24 HAR trace, v13: every single request during
-// a no-signal session stalling ~2.5s in a row).
+// No longer a foreground wait on every navigation — bounds two background things instead:
+// (1) the very first fetch of a URL that isn't cached yet, since there's nothing to fall back to
+// and it still shouldn't hang forever, and (2) the background revalidation fetch in
+// handleShell/handleData, so a stalled connection doesn't leave zombie fetches piling up.
 const NETWORK_TIMEOUT_MS = 2500;
 
 function fetchWithTimeout(req, ms) {
@@ -147,8 +151,9 @@ async function purgeUserScopedCaches() {
   await Promise.all([caches.delete(SHELL_CACHE), caches.delete(DATA_CACHE)]);
 }
 
-// Marks a response as served from the offline cache so page JS can optionally distinguish
-// stale/cached data from a live fetch — cloning is required since Response.headers is
+// Marks a response as served from the cache (not necessarily because offline — under
+// stale-while-revalidate this fires on every cache hit, online or not) so page JS can optionally
+// distinguish cached data from a live fetch — cloning is required since Response.headers is
 // otherwise immutable once constructed from a cache read.
 function withOfflineHeader(resp) {
   const headers = new Headers(resp.headers);
@@ -181,49 +186,45 @@ async function handleStatic(req) {
   }
 }
 
-async function handleShell(req, url) {
-  // The 2.5s network race below only protects against a connection that's live but stalled
-  // (weak signal, captive portal). When the OS already knows there's no connection at all,
-  // navigator.onLine is false and there's no point paying that 2.5s on every single navigation —
-  // a real offline session fires this dozens of times as you tap around, and it was adding up to
-  // feeling just as slow as the original unbounded hang (see the 2026-09-24 HAR trace: every
-  // request stalling ~2.5s back to back). Go straight to cache in that case instead.
-  if (!self.navigator.onLine) {
-    const cached = await caches.match(req, { cacheName: SHELL_CACHE });
-    if (cached) return withOfflineHeader(cached);
-  }
-  try {
-    const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
-    if (isSafeToCache(resp) && new URL(resp.url).pathname !== '/login') {
-      (await caches.open(SHELL_CACHE)).put(req, resp.clone());
+// Stale-while-revalidate: return a cached copy instantly if one exists (no network wait at all),
+// and kick off a background fetch to refresh the cache for next time via event.waitUntil (so the
+// refresh can finish even after the response above has already been sent). If nothing is cached
+// yet — the very first visit to this URL — there's nothing to serve instantly, so this falls
+// back to just awaiting the network fetch directly, bounded by NETWORK_TIMEOUT_MS as before.
+async function staleWhileRevalidate(req, cacheName, event, extraSafetyCheck) {
+  const cached = await caches.match(req, { cacheName });
+
+  const refresh = (async () => {
+    try {
+      const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
+      if (isSafeToCache(resp) && (!extraSafetyCheck || extraSafetyCheck(resp))) {
+        (await caches.open(cacheName)).put(req, resp.clone());
+      }
+      return resp;
+    } catch (e) {
+      return null; // Background refresh failed silently — the cache (if any) just stays as-is.
     }
-    return resp;
-  } catch (e) {
-    const cached = await caches.match(req, { cacheName: SHELL_CACHE });
-    if (cached) return withOfflineHeader(cached);
-    throw e;
+  })();
+
+  if (cached) {
+    if (event) event.waitUntil(refresh);
+    return withOfflineHeader(cached);
   }
+
+  const resp = await refresh;
+  if (resp) return resp;
+  throw new Error(`${cacheName}: nothing cached and network failed`);
 }
 
-async function handleData(req) {
-  // See the matching comment in handleShell — same reasoning applies to data endpoints, which
-  // are fetched even more often per page (states, seasons, regulations, scheduled hunts, ...).
-  if (!self.navigator.onLine) {
-    const cached = await caches.match(req, { cacheName: DATA_CACHE });
-    if (cached) return withOfflineHeader(cached);
-  }
-  try {
-    const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
-    if (isSafeToCache(resp)) (await caches.open(DATA_CACHE)).put(req, resp.clone());
-    return resp;
-  } catch (e) {
-    const cached = await caches.match(req, { cacheName: DATA_CACHE });
-    if (cached) return withOfflineHeader(cached);
-    throw e;
-  }
+function handleShell(req, url, event) {
+  return staleWhileRevalidate(req, SHELL_CACHE, event, (resp) => new URL(resp.url).pathname !== '/login');
 }
 
-async function route(req, url) {
+function handleData(req, event) {
+  return staleWhileRevalidate(req, DATA_CACHE, event);
+}
+
+async function route(req, url, event) {
   if (url.pathname === '/login' && req.mode === 'navigate') {
     let resp;
     try {
@@ -237,10 +238,10 @@ async function route(req, url) {
   if (isStaticAsset(url)) return handleStatic(req);
 
   if (req.mode === 'navigate' && (SHELL_EXACT.includes(url.pathname) || SHELL_PATTERNS.some((re) => re.test(url.pathname)))) {
-    return handleShell(req, url);
+    return handleShell(req, url, event);
   }
 
-  if (DATA_PATTERNS.some((re) => re.test(url.pathname))) return handleData(req);
+  if (DATA_PATTERNS.some((re) => re.test(url.pathname))) return handleData(req, event);
 
   return fetch(req);
 }
@@ -248,5 +249,5 @@ async function route(req, url) {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  event.respondWith(route(event.request, url));
+  event.respondWith(route(event.request, url, event));
 });

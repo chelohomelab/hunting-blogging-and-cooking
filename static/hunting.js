@@ -36,6 +36,18 @@ function closeMobileNav() {
     document.getElementById('mobile-nav-overlay').classList.add('hidden');
 }
 
+// See the matching comment in logbook.js — the service worker serves hbc-data entries
+// stale-while-revalidate (instant from cache, refreshed in the background), so a write needs to
+// delete its own affected cache entries or the very next load would still show the pre-write
+// data until that background refresh catches up. Duplicated here rather than shared since this
+// page deliberately doesn't load a shared app.js.
+async function invalidateCache(urls) {
+    try {
+        const cache = await caches.open('hbc-data');
+        await Promise.all(urls.map(u => cache.delete(u)));
+    } catch { /* Cache Storage unavailable — the next background refresh will still catch up. */ }
+}
+
 let huntingStates = [];
 let currentStateId = null;
 let currentSubTab = 'regulations';
@@ -81,6 +93,7 @@ async function removeCurrentState() {
     const state = huntingStates.find(s => s.id === currentStateId);
     if (!state || !confirm(`Remove ${state.name} and all its season/regulation data?`)) return;
     await fetch(`/hunting/states/${currentStateId}`, { method: 'DELETE' });
+    await invalidateCache(['/hunting/states']);
     currentStateId = null;
     await fetchHuntingStates();
 }
@@ -403,6 +416,7 @@ async function saveScheduledHunt() {
             status.textContent = 'Failed to save: ' + (err.detail || 'unknown error');
             return;
         }
+        await invalidateCache(['/api/scheduled-hunts']);
         toggleScheduledHuntForm();
         loadScheduledHunts();
     } catch {
@@ -415,6 +429,7 @@ async function deleteScheduledHunt() {
     if (!id) return;
     if (!confirm('Delete this scheduled hunt? Any days you already logged against it stay in your Logbook, just unlinked from this plan.')) return;
     await fetch(`/api/scheduled-hunts/${id}`, { method: 'DELETE' });
+    await invalidateCache(['/api/scheduled-hunts']);
     toggleScheduledHuntForm();
     loadScheduledHunts();
 }
@@ -428,6 +443,7 @@ async function startLoggingScheduledHunt(id) {
     try {
         const res = await fetch(`/api/scheduled-hunts/${id}/log-entry`, { method: 'POST' });
         const data = await res.json();
+        await invalidateCache(['/api/scheduled-hunts', '/api/logbook']);
         window.location.href = `/logbook/trip/${data.entry_id}/edit`;
     } catch {
         alert("Couldn't start logging — you appear to be offline. This first step needs a connection; once started, adding each day works fully offline.");

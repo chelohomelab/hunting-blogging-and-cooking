@@ -4,6 +4,13 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.8.1 - 2026-09-25
+- Rebuilt how pages/data load: instead of racing the network on every navigation (with a timeout
+  before falling back to what's saved), a cached page now shows instantly, every time, with an
+  update quietly fetched in the background for next time. Should make clicking around the app —
+  especially the Logbook list and individual entries — noticeably faster, particularly on a weak
+  or slow connection. Your own saves/edits/deletes still show up immediately, not the old version.
+
 ## 0.8.0 - 2026-09-25
 - Logbook: added a "Get Weather" button next to a Morning/Evening Hunt dropdown — fills in
   temperature, conditions, and wind from your already-captured location and the hunt date,
