@@ -14,7 +14,7 @@
 //              cache fallback, purged on every /login render. Also not version-suffixed.
 //
 // SW_VERSION is a manual bump — bump it whenever this file's caching behavior changes.
-const SW_VERSION = 'v13';
+const SW_VERSION = 'v14';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 // Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Static JS/CSS
 // needs hard cache-busting on every release (cache-first would otherwise serve stale code
@@ -35,6 +35,12 @@ const KNOWN_CACHES = [STATIC_CACHE, SHELL_CACHE, DATA_CACHE];
 // (confirmed via a real offline DevTools trace: identical elapsed time between the failed
 // network attempt and the eventual cached response, up to 23s on one request). Racing every
 // fetch against this timeout means a dead connection falls back to cache in ~2.5s instead.
+// This is still only a bound for the "connected but stalled" case (weak signal, captive portal) —
+// when the OS already knows there's no connection at all (navigator.onLine === false), handleShell
+// and handleData skip the race entirely and read cache straight away, since a real browsing
+// session fires many of these per screen and paying 2.5s on each one added right back up to
+// feeling just as slow as before (see the 2026-09-24 HAR trace, v13: every single request during
+// a no-signal session stalling ~2.5s in a row).
 const NETWORK_TIMEOUT_MS = 2500;
 
 function fetchWithTimeout(req, ms) {
@@ -158,6 +164,16 @@ async function handleStatic(req) {
 }
 
 async function handleShell(req, url) {
+  // The 2.5s network race below only protects against a connection that's live but stalled
+  // (weak signal, captive portal). When the OS already knows there's no connection at all,
+  // navigator.onLine is false and there's no point paying that 2.5s on every single navigation —
+  // a real offline session fires this dozens of times as you tap around, and it was adding up to
+  // feeling just as slow as the original unbounded hang (see the 2026-09-24 HAR trace: every
+  // request stalling ~2.5s back to back). Go straight to cache in that case instead.
+  if (!self.navigator.onLine) {
+    const cached = await caches.match(req, { cacheName: SHELL_CACHE });
+    if (cached) return withOfflineHeader(cached);
+  }
   try {
     const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
     if (isSafeToCache(resp) && new URL(resp.url).pathname !== '/login') {
@@ -172,6 +188,12 @@ async function handleShell(req, url) {
 }
 
 async function handleData(req) {
+  // See the matching comment in handleShell — same reasoning applies to data endpoints, which
+  // are fetched even more often per page (states, seasons, regulations, scheduled hunts, ...).
+  if (!self.navigator.onLine) {
+    const cached = await caches.match(req, { cacheName: DATA_CACHE });
+    if (cached) return withOfflineHeader(cached);
+  }
   try {
     const resp = await fetchWithTimeout(req, NETWORK_TIMEOUT_MS);
     if (isSafeToCache(resp)) (await caches.open(DATA_CACHE)).put(req, resp.clone());

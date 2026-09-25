@@ -2,6 +2,9 @@
 static/uploads/*
 !static/uploads/.gitkeep
 
+# Scratch space (e.g. HAR traces dropped in for debugging) — may contain cookies/session data
+static/tmp/
+
 # Backup archives — private data, never commit
 backups/
 

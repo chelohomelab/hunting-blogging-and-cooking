@@ -4,6 +4,13 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.5 - 2026-09-24
+- Fixed offline browsing still feeling painfully slow after the last timeout fix — every single
+  page/data request was still waiting out the full ~2.5s network timeout before showing cached
+  content, and a normal session fires off many of these as you tap around, so it added right back
+  up. When the phone already knows it has no connection at all, cached content now shows
+  immediately instead of waiting out that timeout first.
+
 ## 0.7.4 - 2026-09-24
 - Fixed the Upgrade/Rollback buttons still doing nothing on some phones after the last two
   fixes — the browser's native confirmation popup wasn't appearing at all inside the installed
