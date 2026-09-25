@@ -4,6 +4,11 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.7.11 - 2026-09-25
+- Added Hunting/Logbook/Recipes quick-links to every admin page (Upgrade, Backup, Users, Add
+  Hunting Data, Phone/Tablet Setup) — previously the only way out of an admin page was back to
+  Home first, then wherever you actually wanted to go.
+
 ## 0.7.10 - 2026-09-25
 - Fixed logbook entries saved while offline (no signal) being impossible to open, view, or edit
   until they synced — they now open the same way a synced entry does, showing exactly what you
