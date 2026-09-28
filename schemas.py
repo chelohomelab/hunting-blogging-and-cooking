@@ -30,6 +30,11 @@ class RecipeIn(BaseModel):
     title: str
     hunt_log_entry_id: Optional[int] = None
     game_type: Optional[str] = None
+    prep_time: Optional[str] = None
+    cook_time: Optional[str] = None
+    cooking_method: Optional[str] = None
+    servings: Optional[str] = None
+    cuisine: Optional[str] = None
     ingredients: Optional[str] = None
     instructions: Optional[str] = None
     notes: Optional[str] = None
