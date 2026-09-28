@@ -1,12 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from typing import Optional
 
 import database as models
 from config import templates
-from dependencies import get_db
+from dependencies import get_db, save_uploaded_file, save_uploaded_video, delete_uploaded_file
 from schemas import RecipeIn
 
 router = APIRouter()
@@ -21,6 +22,10 @@ def _hunt_summary(e: models.HuntLogEntry) -> dict:
     }
 
 
+def _media_dict(m: models.RecipeMedia) -> dict:
+    return {"id": m.id, "media_type": m.media_type, "file_path": m.file_path, "caption": m.caption}
+
+
 def _recipe_dict(r: models.Recipe) -> dict:
     return {
         "id": r.id,
@@ -33,6 +38,7 @@ def _recipe_dict(r: models.Recipe) -> dict:
         "notes": r.notes,
         "created_at": r.created_at,
         "updated_at": r.updated_at,
+        "media": [_media_dict(m) for m in r.media],
     }
 
 
@@ -140,6 +146,59 @@ def delete_recipe(recipe_id: int, request: Request, db: Session = Depends(get_db
     ).first()
     if not r:
         raise HTTPException(404, "Not found")
-    db.delete(r)
+    for m in r.media:
+        delete_uploaded_file(m.file_path)
+    db.delete(r)  # cascades to recipe_media rows
     db.commit()
     return {"deleted": recipe_id}
+
+
+# ── Media ────────────────────────────────────────────────────────────────────
+
+@router.post("/api/recipes/{recipe_id}/media")
+async def upload_recipe_media(
+    recipe_id: int, request: Request, db: Session = Depends(get_db),
+    file: UploadFile = File(...), caption: Optional[str] = Form(default=None),
+):
+    r = db.query(models.Recipe).filter(
+        models.Recipe.id == recipe_id, models.Recipe.user_id == request.state.user.id
+    ).first()
+    if not r:
+        raise HTTPException(404, "Not found")
+
+    is_video = (file.content_type or "").startswith("video/")
+    try:
+        if is_video:
+            path = await save_uploaded_video(file, f"recipe{recipe_id}")
+        else:
+            path = await save_uploaded_file(file, f"recipe{recipe_id}")
+    except ValueError as exc:
+        raise HTTPException(413, str(exc))
+    if not path:
+        raise HTTPException(400, "No file provided")
+
+    m = models.RecipeMedia(
+        recipe_id=recipe_id, user_id=request.state.user.id,
+        media_type="video" if is_video else "photo",
+        file_path=path, caption=caption,
+        created_at=datetime.utcnow().isoformat() + "Z",
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    return _media_dict(m)
+
+
+@router.delete("/api/recipes/{recipe_id}/media/{media_id}")
+def delete_recipe_media(recipe_id: int, media_id: int, request: Request, db: Session = Depends(get_db)):
+    m = db.query(models.RecipeMedia).filter(
+        models.RecipeMedia.id == media_id,
+        models.RecipeMedia.recipe_id == recipe_id,
+        models.RecipeMedia.user_id == request.state.user.id,
+    ).first()
+    if not m:
+        raise HTTPException(404, "Not found")
+    delete_uploaded_file(m.file_path)
+    db.delete(m)
+    db.commit()
+    return {"deleted": media_id}

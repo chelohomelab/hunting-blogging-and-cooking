@@ -245,6 +245,26 @@ class Recipe(Base):
 
     user = relationship("User")
     hunt_log_entry = relationship("HuntLogEntry")
+    media = relationship("RecipeMedia", back_populates="recipe", cascade="all, delete-orphan")
+
+
+class RecipeMedia(Base):
+    # Photos/video attached to a recipe — same pattern as HuntLogMedia above (see its comment for
+    # the reasoning behind duplicating user_id here). Unlike logbook media there's no
+    # backcountry/offline angle to this one: recipes.js's own top comment already notes adding a
+    # recipe always happens with a connection, so this table's upload flow is just plain
+    # online-only, not a deliberate design tradeoff specific to it.
+    __tablename__ = "recipe_media"
+    id = Column(Integer, primary_key=True, index=True)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    media_type = Column(String, nullable=False)   # "photo" or "video"
+    file_path = Column(String, nullable=False)     # /static/uploads/... URL
+    caption = Column(String, nullable=True)
+    display_order = Column(Integer, default=0)
+    created_at = Column(String, nullable=False)
+
+    recipe = relationship("Recipe", back_populates="media")
 
 
 def init_db():

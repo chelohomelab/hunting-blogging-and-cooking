@@ -84,6 +84,12 @@ function renderRecipeList() {
             </div>
             ${r.hunt_log_entry ? `<div class="text-xs text-gray-500">🏹 From: ${r.hunt_log_entry.label}</div>` : ''}
             ${r.ingredients ? `<p class="text-xs text-gray-400 line-clamp-2">${r.ingredients.split('\n').filter(Boolean).slice(0, 4).join(', ')}</p>` : ''}
+            ${(r.media && r.media.length) ? `<div class="flex gap-1.5 mt-1">${
+                r.media.slice(0, 4).map(m => m.media_type === 'video'
+                    ? `<div class="w-12 h-12 rounded bg-gray-900 flex items-center justify-center text-lg">🎬</div>`
+                    : `<img src="${m.file_path}" class="w-12 h-12 object-cover rounded">`
+                ).join('')
+            }${r.media.length > 4 ? `<div class="w-12 h-12 rounded bg-gray-900 flex items-center justify-center text-xs text-gray-400">+${r.media.length - 4}</div>` : ''}</div>` : ''}
         </a>
     `).join('');
 }
@@ -117,6 +123,57 @@ async function initRecipeForm(recipeId) {
         huntSelect.innerHTML = '<option value="">— None (offline) —</option>';
     }
 
+    // ── Media (photos/video) — online-only, same as the recipe form as a whole ───────────────
+    const mediaGrid = document.getElementById('media-grid');
+    function mediaItemHtml(m) {
+        const inner = m.media_type === 'video'
+            ? `<video src="${m.file_path}" controls class="w-full h-28 object-cover rounded-lg bg-black"></video>`
+            : `<img src="${m.file_path}" class="w-full h-28 object-cover rounded-lg">`;
+        return `<div class="relative group" data-media-id="${m.id}">${inner}
+            <button type="button" data-delete-media="${m.id}" class="absolute top-1 right-1 bg-red-900/80 hover:bg-red-800 text-white text-xs w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer">×</button>
+        </div>`;
+    }
+    function renderMediaGrid(mediaList) {
+        if (mediaGrid) mediaGrid.innerHTML = (mediaList || []).map(mediaItemHtml).join('');
+    }
+    if (mediaGrid) {
+        mediaGrid.addEventListener('click', async e => {
+            const btn = e.target.closest('[data-delete-media]');
+            if (!btn || !recipeId) return;
+            if (!confirm('Remove this photo/video?')) return;
+            try {
+                await fetch(`/api/recipes/${recipeId}/media/${btn.dataset.deleteMedia}`, { method: 'DELETE' });
+                await invalidateCache(['/api/recipes', `/api/recipes/${recipeId}`]);
+                btn.closest('[data-media-id]')?.remove();
+            } catch {
+                alert("Couldn't delete — you appear to be offline.");
+            }
+        });
+    }
+    const mediaFileInput = document.getElementById('media-file-input');
+    if (mediaFileInput) {
+        mediaFileInput.addEventListener('change', async e => {
+            const files = Array.from(e.target.files);
+            e.target.value = '';
+            for (const file of files) {
+                const fd = new FormData();
+                fd.append('file', file);
+                try {
+                    const res = await fetch(`/api/recipes/${recipeId}/media`, { method: 'POST', body: fd });
+                    if (res.ok) {
+                        await invalidateCache(['/api/recipes', `/api/recipes/${recipeId}`]);
+                        mediaGrid.insertAdjacentHTML('beforeend', mediaItemHtml(await res.json()));
+                    } else {
+                        const err = await res.json().catch(() => ({}));
+                        alert(`Upload failed: ${err.detail || 'unknown error'}`);
+                    }
+                } catch {
+                    alert("Couldn't upload — you appear to be offline. Try again once you're back in range.");
+                }
+            }
+        });
+    }
+
     if (recipeId) {
         document.getElementById('btn-delete').classList.remove('hidden');
         document.getElementById('btn-delete').addEventListener('click', async () => {
@@ -139,6 +196,7 @@ async function initRecipeForm(recipeId) {
             document.getElementById('f-ingredients').value = r.ingredients || '';
             document.getElementById('f-instructions').value = r.instructions || '';
             document.getElementById('f-notes').value = r.notes || '';
+            renderMediaGrid(r.media);
         } catch {
             document.getElementById('form-status').textContent = "Couldn't load this recipe — you appear to be offline.";
             form.querySelectorAll('input, select, textarea, button').forEach(el => el.disabled = true);
@@ -168,8 +226,11 @@ async function initRecipeForm(recipeId) {
                 status.textContent = 'Failed to save: ' + (err.detail || 'unknown error');
                 return;
             }
+            const saved = await res.json();
             await invalidateCache(recipeId ? ['/api/recipes', `/api/recipes/${recipeId}`] : ['/api/recipes']);
-            window.location.href = '/recipes';
+            // New recipes land on their own edit page so photos/video can be attached right
+            // away; edits just go back to the list since media's already there to manage.
+            window.location.href = (!recipeId && saved) ? `/recipes/${saved.id}/edit` : '/recipes';
         } catch {
             status.textContent = "Couldn't save — you appear to be offline. Try again once you're back in range.";
         }
@@ -200,6 +261,12 @@ async function initRecipeView(recipeId) {
         <div class="recipe-divider"><div></div><span>❖</span><div></div></div>
         ${r.game_type ? `<div class="text-center text-sm font-extrabold uppercase tracking-widest" style="color:#7a2f00">${r.game_type}</div>` : ''}
         ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-center text-sm mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
+        ${(r.media && r.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${
+            r.media.map(m => m.media_type === 'video'
+                ? `<video src="${m.file_path}" controls class="w-full rounded shadow"></video>`
+                : `<img src="${m.file_path}" class="w-full rounded shadow object-cover cursor-pointer" onclick="window.open('${m.file_path}', '_blank')">`
+            ).join('')
+        }</div>` : ''}
         ${ingredientItems.length ? `
             <div class="recipe-section-heading">Ingredients</div>
             <ul class="list-disc pl-5 mt-2 space-y-1.5">${ingredientItems.map(i => `<li class="text-base font-semibold leading-snug">${i}</li>`).join('')}</ul>
