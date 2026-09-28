@@ -159,6 +159,19 @@ function collapseBlankLines(text) {
     return text.replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Ingredient section headers (e.g. "🥩 The Meats", "🥕 Vegetables") sit directly against the
+// previous section's last item in the pasted text, no blank line between them — inserts one
+// before each header (except the very first) so the sections read clearly once they land in the
+// Ingredients textarea.
+function formatIngredientsBlock(sliceLines) {
+    const out = [];
+    sliceLines.forEach((line, idx) => {
+        if (idx > 0 && isEmojiHeaderLine(line)) out.push('');
+        out.push(line);
+    });
+    return collapseBlankLines(out.join('\n'));
+}
+
 function parseChatGptRecipe(raw) {
     const lines = raw.replace(/\r\n/g, '\n').split('\n');
     let i = 0;
@@ -197,7 +210,7 @@ function parseChatGptRecipe(raw) {
     }
 
     const ingredientsEnd = prepIdx !== null ? prepIdx : (metaIdx !== null ? metaIdx : lines.length);
-    const ingredients = collapseBlankLines(lines.slice(ingredientsStart, ingredientsEnd).join('\n'));
+    const ingredients = formatIngredientsBlock(lines.slice(ingredientsStart, ingredientsEnd));
 
     let instructions = '';
     if (prepIdx !== null) {
