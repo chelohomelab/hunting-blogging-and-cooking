@@ -237,6 +237,14 @@ class Recipe(Base):
     hunt_log_entry_id = Column(Integer, ForeignKey("hunt_log_entries.id"), nullable=True, index=True)
     title = Column(String, nullable=False)
     game_type = Column(String, nullable=True)   # Deer, Black Bear, Elk, Turkey, Upland Birds, Small Game, Migratory Birds, Trapping — same categories as everywhere else, for filtering
+    # Recipe-card details, all free text rather than a fixed taxonomy — "4-6" or "2 dozen" for
+    # servings, "Grilled", "Smoked", "Braised", etc. for method, are all real answers a rigid
+    # dropdown would fight with.
+    prep_time = Column(String, nullable=True)
+    cook_time = Column(String, nullable=True)
+    cooking_method = Column(String, nullable=True)
+    servings = Column(String, nullable=True)
+    cuisine = Column(String, nullable=True)
     ingredients = Column(String, nullable=True)  # free text, one per line
     instructions = Column(String, nullable=True)
     notes = Column(String, nullable=True)
@@ -285,3 +293,8 @@ def init_db():
 
     _add_col("hunt_log_entries", "scheduled_hunt_id", "scheduled_hunt_id INTEGER")
     _add_col("hunt_log_media", "day_id", "day_id INTEGER")
+    _add_col("recipes", "prep_time", "prep_time TEXT")
+    _add_col("recipes", "cook_time", "cook_time TEXT")
+    _add_col("recipes", "cooking_method", "cooking_method TEXT")
+    _add_col("recipes", "servings", "servings TEXT")
+    _add_col("recipes", "cuisine", "cuisine TEXT")

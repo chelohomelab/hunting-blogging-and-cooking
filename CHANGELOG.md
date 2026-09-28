@@ -4,6 +4,10 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.9.1 - 2026-09-28
+- Recipes now have Prep Time, Cook Time, Cooking Method, Servings, and Cuisine fields, shown at
+  the top of the recipe card under the game type.
+
 ## 0.9.0 - 2026-09-28
 - Recipes now support photos and video, same as logbook entries — attach them from the recipe's
   edit page (needs a connection), see them on the recipe card and in the recipes list.

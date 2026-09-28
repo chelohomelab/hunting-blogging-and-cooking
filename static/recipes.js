@@ -193,6 +193,11 @@ async function initRecipeForm(recipeId) {
             document.getElementById('f-title').value = r.title || '';
             document.getElementById('f-game-type').value = r.game_type || '';
             huntSelect.value = r.hunt_log_entry_id || '';
+            document.getElementById('f-prep-time').value = r.prep_time || '';
+            document.getElementById('f-cook-time').value = r.cook_time || '';
+            document.getElementById('f-cooking-method').value = r.cooking_method || '';
+            document.getElementById('f-servings').value = r.servings || '';
+            document.getElementById('f-cuisine').value = r.cuisine || '';
             document.getElementById('f-ingredients').value = r.ingredients || '';
             document.getElementById('f-instructions').value = r.instructions || '';
             document.getElementById('f-notes').value = r.notes || '';
@@ -209,6 +214,11 @@ async function initRecipeForm(recipeId) {
             title: document.getElementById('f-title').value,
             hunt_log_entry_id: huntSelect.value ? parseInt(huntSelect.value) : null,
             game_type: document.getElementById('f-game-type').value || null,
+            prep_time: document.getElementById('f-prep-time').value || null,
+            cook_time: document.getElementById('f-cook-time').value || null,
+            cooking_method: document.getElementById('f-cooking-method').value || null,
+            servings: document.getElementById('f-servings').value || null,
+            cuisine: document.getElementById('f-cuisine').value || null,
             ingredients: document.getElementById('f-ingredients').value || null,
             instructions: document.getElementById('f-instructions').value || null,
             notes: document.getElementById('f-notes').value || null,
@@ -255,11 +265,19 @@ async function initRecipeView(recipeId) {
     }
 
     const ingredientItems = (r.ingredients || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const metaItems = [
+        r.prep_time ? `⏱️ Prep: ${r.prep_time}` : null,
+        r.cook_time ? `🔥 Cook: ${r.cook_time}` : null,
+        r.cooking_method ? `👨‍🍳 ${r.cooking_method}` : null,
+        r.servings ? `🍽️ Serves ${r.servings}` : null,
+        r.cuisine ? `🌍 ${r.cuisine}` : null,
+    ].filter(Boolean);
 
     box.innerHTML = `
         <div class="recipe-title">${r.title}</div>
         <div class="recipe-divider"><div></div><span>❖</span><div></div></div>
         ${r.game_type ? `<div class="text-center text-sm font-extrabold uppercase tracking-widest" style="color:#7a2f00">${r.game_type}</div>` : ''}
+        ${metaItems.length ? `<div class="text-center text-xs font-semibold mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1" style="color:#3a2a18">${metaItems.map(i => `<span>${i}</span>`).join('')}</div>` : ''}
         ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-center text-sm mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
         ${(r.media && r.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${
             r.media.map(m => m.media_type === 'video'
