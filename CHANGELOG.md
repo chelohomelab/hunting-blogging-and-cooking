@@ -4,6 +4,10 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.8.2 - 2026-09-28
+- Replaced the phone background for logbook entries and trip pages with a new photo, and
+  re-fit the text placement to match.
+
 ## 0.8.1 - 2026-09-25
 - Rebuilt how pages/data load: instead of racing the network on every navigation (with a timeout
   before falling back to what's saved), a cached page now shows instantly, every time, with an
