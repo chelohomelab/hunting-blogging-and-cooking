@@ -4,6 +4,10 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.9.3 - 2026-09-28
+- The "From ChatGPT" recipe parser now puts a blank line between ingredient sections (Meats,
+  Vegetables, etc.) so they're easier to read once they land in the Ingredients field.
+
 ## 0.9.2 - 2026-09-28
 - Added a "From ChatGPT" tab to the recipe form — paste a recipe from your ChatGPT template and
   it splits it into Title, Short Description, Ingredients, Instructions, Notes, Prep/Cook Time,
