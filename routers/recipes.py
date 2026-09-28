@@ -30,6 +30,7 @@ def _recipe_dict(r: models.Recipe) -> dict:
     return {
         "id": r.id,
         "title": r.title,
+        "description": r.description,
         "hunt_log_entry_id": r.hunt_log_entry_id,
         "hunt_log_entry": _hunt_summary(r.hunt_log_entry) if r.hunt_log_entry else None,
         "game_type": r.game_type,

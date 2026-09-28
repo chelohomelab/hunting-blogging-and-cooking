@@ -35,6 +35,25 @@ function closeMobileNav() {
     document.getElementById('mobile-nav-overlay').classList.add('hidden');
 }
 
+// ── Recipe form tabs (Manual Entry / From ChatGPT) ──────────────────────────────────────────
+
+function switchRecipeTab(tab) {
+    const form = document.getElementById('recipe-form');
+    const chatgptPane = document.getElementById('tab-chatgpt');
+    if (!form || !chatgptPane) return;
+    form.classList.toggle('hidden', tab !== 'manual');
+    chatgptPane.classList.toggle('hidden', tab !== 'chatgpt');
+    [['tab-btn-manual', 'manual'], ['tab-btn-chatgpt', 'chatgpt']].forEach(([id, name]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const active = name === tab;
+        btn.classList.toggle('border-rose-500', active);
+        btn.classList.toggle('text-rose-400', active);
+        btn.classList.toggle('border-transparent', !active);
+        btn.classList.toggle('text-gray-400', !active);
+    });
+}
+
 // See the matching comment in logbook.js — the service worker serves hbc-data entries
 // stale-while-revalidate (instant from cache, refreshed in the background), so a write needs to
 // delete its own affected cache entries or the very next load would still show the pre-write
@@ -107,11 +126,149 @@ async function loadRecipesList() {
     renderRecipeList();
 }
 
+// ── ChatGPT recipe paste parser ─────────────────────────────────────────────────────────────
+//
+// Splits a recipe generated from the user's own ChatGPT template into this form's fields:
+//   Title
+//   Short description
+//   (ingredient sections, freeform headers — "The Meats", "Vegetables", etc.)
+//   Preparation (numbered steps)
+//   HB&C Recipe Note
+//   Prep Time: / Cook Time: / Cooking Method: / Servings: / Cuisine:
+//
+// Best-effort, not a guaranteed-correct parse: it anchors on the parts of the template that are
+// reliably present in every recipe (the "Preparation" and "HB&C Recipe Note" headers, and the
+// "Label: value" lines at the end) rather than trying to understand every possible ingredient
+// section heading, since those vary recipe to recipe ("The Meats" vs "Braising Liquid" vs
+// whatever else ChatGPT titles that section). Ingredient section headers are left as plain lines
+// inside the Ingredients field rather than parsed out individually — that field is already
+// freeform "one per line" text, so preserving them there both keeps the grouping readable and
+// sidesteps needing to guess at header wording. Verified against a real generated recipe before
+// shipping — see the PR description for the worked example.
+const RECIPE_EMOJI_HEADER_RE = /^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2300}-\u{23FF}]/u;
+
+function isEmojiHeaderLine(line) {
+    return RECIPE_EMOJI_HEADER_RE.test(line.trim());
+}
+
+function stripLeadingEmoji(line) {
+    return line.replace(RECIPE_EMOJI_HEADER_RE, '').trim();
+}
+
+function collapseBlankLines(text) {
+    return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function parseChatGptRecipe(raw) {
+    const lines = raw.replace(/\r\n/g, '\n').split('\n');
+    let i = 0;
+    const skipBlank = () => { while (i < lines.length && !lines[i].trim()) i++; };
+
+    skipBlank();
+    if (i >= lines.length) return null;
+    const title = stripLeadingEmoji(lines[i]);
+    i++;
+    skipBlank();
+
+    const descLines = [];
+    while (i < lines.length && lines[i].trim() && !isEmojiHeaderLine(lines[i])) {
+        descLines.push(lines[i].trim());
+        i++;
+    }
+    const description = descLines.join(' ');
+    const ingredientsStart = i;
+
+    let prepIdx = null;
+    for (let j = i; j < lines.length; j++) {
+        if (isEmojiHeaderLine(lines[j]) && /preparation/i.test(lines[j])) { prepIdx = j; break; }
+    }
+
+    let noteIdx = null;
+    for (let j = (prepIdx !== null ? prepIdx + 1 : i); j < lines.length; j++) {
+        if (/HB&C Recipe Note/i.test(lines[j])) { noteIdx = j; break; }
+    }
+
+    const META_LABELS = ['prep time', 'cook time', 'cooking method', 'servings', 'cuisine'];
+    let metaIdx = null;
+    const metaSearchStart = noteIdx !== null ? noteIdx + 1 : (prepIdx !== null ? prepIdx + 1 : i);
+    for (let j = metaSearchStart; j < lines.length; j++) {
+        const stripped = lines[j].trim().toLowerCase();
+        if (META_LABELS.some(lbl => stripped.startsWith(lbl + ':'))) { metaIdx = j; break; }
+    }
+
+    const ingredientsEnd = prepIdx !== null ? prepIdx : (metaIdx !== null ? metaIdx : lines.length);
+    const ingredients = collapseBlankLines(lines.slice(ingredientsStart, ingredientsEnd).join('\n'));
+
+    let instructions = '';
+    if (prepIdx !== null) {
+        const instrEnd = noteIdx !== null ? noteIdx : (metaIdx !== null ? metaIdx : lines.length);
+        instructions = collapseBlankLines(lines.slice(prepIdx + 1, instrEnd).join('\n'));
+    }
+
+    let notes = '';
+    if (noteIdx !== null) {
+        const notesEnd = metaIdx !== null ? metaIdx : lines.length;
+        notes = collapseBlankLines(lines.slice(noteIdx + 1, notesEnd).join('\n'));
+    }
+
+    const meta = {};
+    if (metaIdx !== null) {
+        for (let j = metaIdx; j < lines.length; j++) {
+            const m = /^\s*(prep time|cook time|cooking method|servings|cuisine)\s*:\s*(.+)$/i.exec(lines[j]);
+            if (m) meta[m[1].toLowerCase()] = m[2].trim();
+        }
+    }
+
+    return {
+        title, description, ingredients, instructions, notes,
+        prep_time: meta['prep time'] || '',
+        cook_time: meta['cook time'] || '',
+        cooking_method: meta['cooking method'] || '',
+        servings: meta['servings'] || '',
+        cuisine: meta['cuisine'] || '',
+        _foundPreparation: prepIdx !== null,
+        _foundNote: noteIdx !== null,
+        _foundMeta: metaIdx !== null,
+    };
+}
+
 // ── Recipe form (new + edit) ────────────────────────────────────────────────────────────────
 
 async function initRecipeForm(recipeId) {
     const form = document.getElementById('recipe-form');
     if (!form) return;
+
+    switchRecipeTab('manual');
+
+    const btnParseChatGpt = document.getElementById('btn-parse-chatgpt');
+    if (btnParseChatGpt) {
+        btnParseChatGpt.addEventListener('click', () => {
+            const status = document.getElementById('chatgpt-parse-status');
+            const raw = document.getElementById('chatgpt-paste').value;
+            if (!raw.trim()) { status.textContent = 'Paste a recipe first.'; return; }
+            const parsed = parseChatGptRecipe(raw);
+            if (!parsed) { status.textContent = "Couldn't find anything to parse."; return; }
+            document.getElementById('f-title').value = parsed.title;
+            document.getElementById('f-description').value = parsed.description;
+            document.getElementById('f-ingredients').value = parsed.ingredients;
+            document.getElementById('f-instructions').value = parsed.instructions;
+            document.getElementById('f-notes').value = parsed.notes;
+            document.getElementById('f-prep-time').value = parsed.prep_time;
+            document.getElementById('f-cook-time').value = parsed.cook_time;
+            document.getElementById('f-cooking-method').value = parsed.cooking_method;
+            document.getElementById('f-servings').value = parsed.servings;
+            document.getElementById('f-cuisine').value = parsed.cuisine;
+            const missing = [
+                !parsed._foundPreparation ? 'Preparation steps' : null,
+                !parsed._foundNote ? 'HB&C Recipe Note' : null,
+                !parsed._foundMeta ? 'Prep/Cook Time, Method, Servings, Cuisine' : null,
+            ].filter(Boolean);
+            status.textContent = missing.length
+                ? `Filled in what it could find — couldn't locate: ${missing.join(', ')}. Check the fields below.`
+                : 'Filled in — double-check the fields below before saving.';
+            switchRecipeTab('manual');
+        });
+    }
 
     const huntSelect = document.getElementById('f-hunt-link');
     try {
@@ -191,6 +348,7 @@ async function initRecipeForm(recipeId) {
             if (!res.ok) throw new Error();
             const r = await res.json();
             document.getElementById('f-title').value = r.title || '';
+            document.getElementById('f-description').value = r.description || '';
             document.getElementById('f-game-type').value = r.game_type || '';
             huntSelect.value = r.hunt_log_entry_id || '';
             document.getElementById('f-prep-time').value = r.prep_time || '';
@@ -212,6 +370,7 @@ async function initRecipeForm(recipeId) {
         e.preventDefault();
         const payload = {
             title: document.getElementById('f-title').value,
+            description: document.getElementById('f-description').value || null,
             hunt_log_entry_id: huntSelect.value ? parseInt(huntSelect.value) : null,
             game_type: document.getElementById('f-game-type').value || null,
             prep_time: document.getElementById('f-prep-time').value || null,
@@ -276,7 +435,8 @@ async function initRecipeView(recipeId) {
     box.innerHTML = `
         <div class="recipe-title">${r.title}</div>
         <div class="recipe-divider"><div></div><span>❖</span><div></div></div>
-        ${r.game_type ? `<div class="text-center text-sm font-extrabold uppercase tracking-widest" style="color:#7a2f00">${r.game_type}</div>` : ''}
+        ${r.description ? `<p class="text-center text-sm italic font-semibold" style="color:#3a2a18">${r.description}</p>` : ''}
+        ${r.game_type ? `<div class="text-center text-sm font-extrabold uppercase tracking-widest mt-1.5" style="color:#7a2f00">${r.game_type}</div>` : ''}
         ${metaItems.length ? `<div class="text-center text-xs font-semibold mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1" style="color:#3a2a18">${metaItems.map(i => `<span>${i}</span>`).join('')}</div>` : ''}
         ${r.hunt_log_entry ? `<a href="/logbook/${r.hunt_log_entry_id}" class="block text-center text-sm mt-1.5 font-semibold underline">🏹 From: ${r.hunt_log_entry.label}</a>` : ''}
         ${(r.media && r.media.length) ? `<div class="grid grid-cols-2 gap-2 mt-3">${

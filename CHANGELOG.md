@@ -4,6 +4,12 @@ Plain-English release notes, shown on the Upgrade page under "Show details" for 
 versions you're behind on. Newest first. Add a new `## x.y.z` section here whenever `VERSION`
 is bumped — see `_changelog_entries_since()` in `routers/upgrade.py` for how this file is read.
 
+## 0.9.2 - 2026-09-28
+- Added a "From ChatGPT" tab to the recipe form — paste a recipe from your ChatGPT template and
+  it splits it into Title, Short Description, Ingredients, Instructions, Notes, Prep/Cook Time,
+  Cooking Method, Servings, and Cuisine automatically, ready to review before saving. Recipes
+  also gained a Short Description field, shown under the title on the recipe card.
+
 ## 0.9.1 - 2026-09-28
 - Recipes now have Prep Time, Cook Time, Cooking Method, Servings, and Cuisine fields, shown at
   the top of the recipe card under the game type.

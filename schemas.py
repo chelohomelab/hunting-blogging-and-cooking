@@ -28,6 +28,7 @@ class HuntLogEntryIn(BaseModel):
 
 class RecipeIn(BaseModel):
     title: str
+    description: Optional[str] = None
     hunt_log_entry_id: Optional[int] = None
     game_type: Optional[str] = None
     prep_time: Optional[str] = None
