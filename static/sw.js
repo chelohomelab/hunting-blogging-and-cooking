@@ -33,7 +33,7 @@
 // manifest.json, images, ...). STATIC_CACHE is cache-first and never revalidates an asset it
 // already has, so an already-installed service worker keeps serving the old cached copy of e.g.
 // logbook.js forever after a deploy unless the cache name itself changes.
-const SW_VERSION = 'v18';
+const SW_VERSION = 'v19';
 const STATIC_CACHE = `hbc-static-${SW_VERSION}`;
 // Shell/data caches are deliberately NOT version-suffixed, unlike hbc-static. Tying their name to
 // SW_VERSION meant every version bump wiped them via the activate cleanup below; a device that
@@ -67,7 +67,7 @@ const STATIC_URLS = [
   '/static/images/background-widescreen.png',
   '/static/images/phone-background.png',
   '/static/images/logbook_background.jpeg',
-  '/static/images/phone_logbook_background.jpeg',
+  '/static/images/phone_logbook_background.png',
   '/static/images/recipes-background-widescreen.jpeg',
   '/static/images/phone-recipes-background.png',
   '/static/hunting.js',
