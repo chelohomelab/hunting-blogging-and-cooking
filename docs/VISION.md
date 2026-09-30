@@ -35,19 +35,30 @@ Then port over the season/regulations/calendar feature as-is:
 
 ## What comes after v1.0 — build incrementally, same as G&R did
 
+**Update (2026-09-30): all four items below have since shipped.** This section is kept as
+historical planning context — see `CLAUDE.md`'s "Current state" section and `CHANGELOG.md` for
+what's actually live today.
+
 One feature at a time, each shipped and used before starting the next:
 
 1. **Hunt logging** — a blog-style journal entry per hunt (date, location, weather, what
    happened, harvest or not). This is the heart of the app; everything else attaches to it.
+   *Shipped, and grew further than originally scoped: scheduled/planned hunts, multi-day trip
+   logging, and offline-editable pending entries were all added afterward.*
 2. **Media** — photos and video attached to a hunt log entry. Needs real storage/thumbnailing
-   design, not an afterthought bolted onto the logging feature.
+   design, not an afterthought bolted onto the logging feature. *Shipped — and the same
+   `HuntLogMedia` pattern was later reused for recipe photos/video too.*
 3. **Maps** — onX integration for hunt locations/routes. No known public onX API as of this
    writing — likely a manual link/screenshot/embed approach rather than a real API integration
    unless that changes. (A first pass built a generic Leaflet/CartoDB map instead of actual onX
    integration — this is exactly the mismatch that section warned about, and it's been removed;
    see the 2026-09-21 discussion for the onX integration approach actually being pursued.)
+   *Still not built — importing onX GPX waypoint data is an explicitly on-hold pending decision,
+   not forgotten; see `CLAUDE.md`'s "Known gaps" section before starting on it.*
 4. **Recipes** — meals cooked from the wild game harvested, linked back to the hunt(s) that
-   produced the ingredients.
+   produced the ingredients. *Shipped, including card details (prep/cook time, method, servings,
+   cuisine) and a "paste from ChatGPT" tab that auto-fills the form from a generated recipe —
+   neither of which was anticipated at the time this list was written.*
 
 ## Architecture principles (added 2026-09-16, after reviewing an external AI-generated design)
 
